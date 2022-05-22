@@ -230,6 +230,7 @@ impl Readable for String {
 
 impl Writable for String {
     fn write(&self, output: &mut impl OutputByteQueue) -> Result<(), WriteError> {
+        VarInt(self.len() as i32).write(output)?;
         output.put_bytes(self.as_bytes());
         Ok(())
     }
@@ -383,6 +384,17 @@ mod tests {
                 5, BytesMut::from_iter(vec![255, 255, 255, 255, 15])
             );
             assert_eq!(VarInt::read(&mut input).unwrap(), VarInt(-1));
+        }
+    }
+
+    #[test]
+    fn success_string_test() {
+        {
+            const S: &str = "jenya705 is the best";
+            let mut output = BytesOutputQueue::new();
+            S.to_string().write(&mut output).unwrap();
+            let mut input = BytesInputQueue::new_without_slice(output.get_bytes());
+            assert_eq!(String::read(&mut input).unwrap(), S);
         }
     }
 }

@@ -18,6 +18,10 @@ impl BytesInputQueue {
             length, bytes
         }
     }
+
+    pub fn new_without_slice(bytes: BytesMut) -> BytesInputQueue {
+        BytesInputQueue::new(bytes.len(), bytes)
+    }
 }
 
 impl InputByteQueue for BytesInputQueue {
@@ -61,7 +65,10 @@ impl InputByteQueue for BytesInputQueue {
     }
 
     fn remaining_bytes(&self) -> usize {
-        self.length - self.offset
+        match self.length > self.offset {
+            true => self.length - self.offset,
+            false => 0
+        }
     }
 }
 
