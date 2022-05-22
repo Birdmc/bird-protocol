@@ -1,5 +1,4 @@
 use std::fmt::{Display, Formatter};
-use bytes::{Bytes, BytesMut};
 
 #[derive(Debug, Clone)]
 pub enum InputByteQueueError {
@@ -17,19 +16,14 @@ pub trait InputByteQueue {
     fn take_slice(&mut self, size: usize) -> InputByteQueueResult<&[u8]>;
 
     fn has_bytes(&mut self, bytes: usize) -> bool;
+
+    fn remaining_bytes(&self) -> usize;
 }
 
 pub trait OutputByteQueue {
     fn put_byte(&mut self, byte: u8);
 
     fn put_bytes(&mut self, bytes: &[u8]);
-}
-
-#[cfg(feature = "tokio-bytes")]
-pub struct BytesInputByteQueue {
-    offset: usize,
-    length: usize,
-    array: BytesMut,
 }
 
 impl Display for InputByteQueueError {

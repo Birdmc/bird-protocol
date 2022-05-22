@@ -2,11 +2,16 @@
 name = "cubic-protocol"
 version = "0.1.0"
 edition = "2021"
+description = "Minecraft protocol on rust"
+license = "MIT"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 bytes = { version = "1.1.0", optional = true }
+cubic-chat = "0.1.0"
+serde_json = "1.0.81"
+uuid = "1.0.0"
 
 [features]
 tokio-bytes = ["dep:bytes"]
