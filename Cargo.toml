@@ -9,6 +9,7 @@ license = "MIT"
 
 [dependencies]
 bytes = { version = "1.1.0", optional = true }
+euclid = "0.22.7"
 cubic-chat = "0.1.0"
 serde_json = "1.0.81"
 uuid = "1.0.0"

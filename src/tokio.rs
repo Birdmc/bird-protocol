@@ -1,10 +1,23 @@
-use bytes::BytesMut;
-use crate::bytes::{InputByteQueue, InputByteQueueError, InputByteQueueResult};
+use bytes::{BufMut, BytesMut};
+use crate::bytes::{InputByteQueue, InputByteQueueError, InputByteQueueResult, OutputByteQueue};
 
 pub struct BytesInputQueue {
     offset: usize,
     length: usize,
     bytes: BytesMut,
+}
+
+pub struct BytesOutputQueue {
+    bytes: BytesMut,
+}
+
+impl BytesInputQueue {
+    pub fn new(length: usize, bytes: BytesMut) -> BytesInputQueue {
+        BytesInputQueue {
+            offset: 0,
+            length, bytes
+        }
+    }
 }
 
 impl InputByteQueue for BytesInputQueue {
@@ -49,5 +62,27 @@ impl InputByteQueue for BytesInputQueue {
 
     fn remaining_bytes(&self) -> usize {
         self.length - self.offset
+    }
+}
+
+impl BytesOutputQueue {
+    pub fn new() -> BytesOutputQueue {
+        BytesOutputQueue {
+            bytes: BytesMut::new(),
+        }
+    }
+
+    pub fn get_bytes(self) -> BytesMut {
+        self.bytes
+    }
+}
+
+impl OutputByteQueue for BytesOutputQueue {
+    fn put_byte(&mut self, byte: u8) {
+        self.bytes.put_u8(byte)
+    }
+
+    fn put_bytes(&mut self, bytes: &[u8]) {
+        self.bytes.put_slice(bytes)
     }
 }

@@ -3,13 +3,16 @@ use std::mem;
 use std::str::{from_utf8, Utf8Error};
 use cubic_chat::component::ComponentType;
 use cubic_chat::identifier::{Identifier, IdentifierError};
+use euclid::default::Vector3D;
 use serde_json::Error;
 use uuid::Uuid;
 
+#[derive(Debug)]
 pub enum WriteError {
     JSON(serde_json::Error),
 }
 
+#[derive(Debug)]
 pub enum ReadError {
     BadVarNum,
     BadUtf8(Utf8Error),
@@ -51,7 +54,7 @@ impl From<InputByteQueueError> for ReadError {
 
 macro_rules! delegate_type {
     ($name: ident, $delegates: ident) => {
-        #[derive(Copy, Clone, Debug, Default)]
+        #[derive(Copy, Clone, Debug, Default, PartialEq, PartialOrd, Hash)]
         pub struct $name($delegates);
 
         impl From<$delegates> for $name {
@@ -87,23 +90,17 @@ macro_rules! protocol_num_type {
     }
 }
 
-const VAR_NUM_SEGMENT_BITS: i32 = 0x7F;
-const VAR_NUM_CONTINUE_BIT: i32 = 0x80;
-const VAR_NUM_R_CONTINUE_BIT: i32 = !VAR_NUM_CONTINUE_BIT;
-
 macro_rules! protocol_var_num_type {
-    ($type: ident, $num_type: ident) => {
+    ($type: ident, $num_type: ident, $num_unsigned: ident) => {
         impl Writable for $type {
             fn write(&self, output: &mut impl OutputByteQueue) -> Result<(), WriteError>{
-                let mut value = $num_type::from(*self);
+                let mut value = $num_type::from(*self) as $num_unsigned;
                 loop {
-                    if ((value & (VAR_NUM_R_CONTINUE_BIT as $num_type)) == 0) {
+                    if ((value & 0x80) == 0) {
                         output.put_byte(value as u8);
                         break;
                     }
-                    output.put_byte(
-                        ((value & (VAR_NUM_SEGMENT_BITS as $num_type)) | (VAR_NUM_CONTINUE_BIT as $num_type)) as u8
-                    );
+                    output.put_byte(((value as u8) & 0x7f) | 0x80);
                     value >>= 7;
                 }
                 Ok(())
@@ -117,8 +114,8 @@ macro_rules! protocol_var_num_type {
                 let mut position: $num_type = 0;
                 loop {
                     let current_byte = input.take_byte()? as $num_type;
-                    value |= (current_byte & (VAR_NUM_SEGMENT_BITS as $num_type)) << position;
-                    if ((current_byte & (VAR_NUM_CONTINUE_BIT as $num_type)) == 0) {
+                    value |= (current_byte & 0x7f) << position;
+                    if ((current_byte & 0x80) == 0) {
                         break;
                     }
                     position += 7;
@@ -193,8 +190,8 @@ protocol_num_type!(f64);
 
 delegate_type!(VarInt, i32);
 delegate_type!(VarLong, i64);
-protocol_var_num_type!(VarInt, i32);
-protocol_var_num_type!(VarLong, i64);
+protocol_var_num_type!(VarInt, i32, u32);
+protocol_var_num_type!(VarLong, i64, u64);
 
 impl Readable for Uuid {
     fn read(input: &mut impl InputByteQueue) -> Result<Self, ReadError> {
@@ -262,5 +259,130 @@ impl Writable for ComponentType {
     fn write(&self, output: &mut impl OutputByteQueue) -> Result<(), WriteError> {
         let str = serde_json::to_string(self)?;
         str.write(output)
+    }
+}
+
+pub type BlockPosition = Vector3D<i32>;
+
+const BLOCK_X_MASK: u64 = 0x3ffffff << 38;
+const BLOCK_Z_MASK: u64 = 0x3ffffff << 12;
+const BLOCK_Y_MASK: u64 = 0xfff;
+
+const BLOCK_X_NEG_BOUND: i32 = 1 << 25;
+const BLOCK_Z_NEG_BOUND: i32 = BLOCK_X_NEG_BOUND;
+const BLOCK_Y_NEG_BOUND: i32 = 1 << 11;
+
+impl Readable for BlockPosition {
+    fn read(input: &mut impl InputByteQueue) -> Result<Self, ReadError> {
+        let val = u64::read(input)?;
+        let mut x = ((val & BLOCK_X_MASK) >> 38) as i32;
+        let mut z = ((val & BLOCK_Z_MASK) >> 12) as i32;
+        let mut y = (val & BLOCK_Y_MASK) as i32;
+        if x >= BLOCK_X_NEG_BOUND {
+            x -= BLOCK_X_NEG_BOUND << 1;
+        }
+        if z >= BLOCK_Z_NEG_BOUND {
+            z -= BLOCK_Z_NEG_BOUND << 1;
+        }
+        if y >= BLOCK_Y_NEG_BOUND {
+            y -= BLOCK_Y_NEG_BOUND << 1;
+        }
+        Ok(BlockPosition::new(x, y, z))
+    }
+}
+
+impl Writable for BlockPosition {
+    fn write(&self, output: &mut impl OutputByteQueue) -> Result<(), WriteError> {
+        let x = self.x as i64;
+        let z = self.z as i64;
+        let y = self.y as i64;
+        (((x & BLOCK_X_MASK as i64) << 38) |
+            ((z & BLOCK_Z_MASK as i64) << 12) |
+            (y & BLOCK_Y_MASK as i64)
+        ).write(output)
+    }
+}
+
+#[cfg(all(test, feature = "tokio-bytes"))]
+mod tests {
+    use super::*;
+    use bytes::{BufMut, BytesMut};
+    use crate::tokio::{BytesInputQueue, BytesOutputQueue};
+
+    #[test]
+    fn success_integer_test() {
+        {
+            let mut output = BytesOutputQueue::new();
+            0xff321233_u32.write(&mut output).unwrap();
+            let bytes = output.get_bytes();
+            assert_eq!(bytes.len(), 4);
+            assert_eq!(bytes[0], 0x33);
+            assert_eq!(bytes[1], 0x12);
+            assert_eq!(bytes[2], 0x32);
+            assert_eq!(bytes[3], 0xff);
+        }
+        {
+            let mut bytes = BytesMut::new();
+            bytes.put_u8(0x97);
+            bytes.put_u8(0x32);
+            bytes.put_u8(0x11);
+            bytes.put_u8(0xaa);
+            let mut input = BytesInputQueue::new(4, bytes);
+            assert_eq!(u32::read(&mut input).unwrap(), 0xaa113297_u32);
+        }
+        {
+            const F: i64 = 33125;
+            const S: i32 = 3294634;
+            const T: u16 = 3219;
+            let mut output = BytesOutputQueue::new();
+            F.write(&mut output).unwrap();
+            S.write(&mut output).unwrap();
+            T.write(&mut output).unwrap();
+            let bytes = output.get_bytes();
+            let mut input = BytesInputQueue::new(bytes.len(), bytes);
+            assert_eq!(i64::read(&mut input).unwrap(), F);
+            assert_eq!(i32::read(&mut input).unwrap(), S);
+            assert_eq!(u16::read(&mut input).unwrap(), T);
+        }
+    }
+
+    #[test]
+    fn success_var_num_test() {
+        {
+            let mut output = BytesOutputQueue::new();
+            VarInt(0).write(&mut output).unwrap();
+            let bytes = output.get_bytes();
+            assert_eq!(bytes[0], 0);
+        }
+        {
+            let mut output = BytesOutputQueue::new();
+            VarInt(2097151).write(&mut output).unwrap();
+            let bytes = output.get_bytes();
+            assert_eq!(bytes.to_vec(), vec![255, 255, 127]);
+        }
+        {
+            let mut output = BytesOutputQueue::new();
+            VarInt(-1).write(&mut output).unwrap();
+            let bytes = output.get_bytes();
+            assert_eq!(bytes.to_vec(), vec![255, 255, 255, 255, 15]);
+        }
+        {
+            let mut input = BytesInputQueue::new(
+                1, BytesMut::from_iter(vec![0])
+            );
+            assert_eq!(VarInt::read(&mut input).unwrap(), VarInt(0));
+        }
+        {
+            let mut input = BytesInputQueue::new(
+                3, BytesMut::from_iter(vec![255, 255, 127])
+            );
+            assert_eq!(VarInt::read(&mut input).unwrap(), VarInt(2097151));
+        }
+        {
+            let mut input = BytesInputQueue::new(
+                5, BytesMut::from_iter(vec![255, 255, 255, 255, 15])
+            );
+            assert_eq!(VarInt::read(&mut input).unwrap(), VarInt(-1));
+        }
     }
 }
