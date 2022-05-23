@@ -96,7 +96,7 @@ macro_rules! protocol_var_num_type {
             fn write(&self, output: &mut impl OutputByteQueue) -> Result<(), WriteError>{
                 let mut value = $num_type::from(*self) as $num_unsigned;
                 loop {
-                    if ((value & 0x80) == 0) {
+                    if ((value & !0x7f) == 0) {
                         output.put_byte(value as u8);
                         break;
                     }
@@ -265,8 +265,8 @@ impl Writable for ComponentType {
 
 pub type BlockPosition = Vector3D<i32>;
 
-const BLOCK_X_MASK: u64 = 0x3ffffff << 38;
-const BLOCK_Z_MASK: u64 = 0x3ffffff << 12;
+const BLOCK_X_MASK: u64 = 0x3ffffff;
+const BLOCK_Z_MASK: u64 = BLOCK_X_MASK;
 const BLOCK_Y_MASK: u64 = 0xfff;
 
 const BLOCK_X_NEG_BOUND: i32 = 1 << 25;
@@ -276,8 +276,8 @@ const BLOCK_Y_NEG_BOUND: i32 = 1 << 11;
 impl Readable for BlockPosition {
     fn read(input: &mut impl InputByteQueue) -> Result<Self, ReadError> {
         let val = u64::read(input)?;
-        let mut x = ((val & BLOCK_X_MASK) >> 38) as i32;
-        let mut z = ((val & BLOCK_Z_MASK) >> 12) as i32;
+        let mut x = (val >> 38) as i32;
+        let mut z = ((val >> 12) & BLOCK_Z_MASK) as i32;
         let mut y = (val & BLOCK_Y_MASK) as i32;
         if x >= BLOCK_X_NEG_BOUND {
             x -= BLOCK_X_NEG_BOUND << 1;
@@ -308,7 +308,18 @@ impl Writable for BlockPosition {
 mod tests {
     use super::*;
     use bytes::{BufMut, BytesMut};
+    use cubic_chat::color::DefaultColor;
+    use cubic_chat::component::{TextComponent};
     use crate::tokio::{BytesInputQueue, BytesOutputQueue};
+
+    macro_rules! test_macro {
+        ($($type: ident => $value: expr)*) => {
+            let mut output = BytesOutputQueue::new();
+            $($value.write(&mut output).unwrap();)*
+            let mut input = BytesInputQueue::new_without_slice(output.get_bytes());
+            $(assert_eq!($type::read(&mut input).unwrap(), $value);)*
+        }
+    }
 
     #[test]
     fn success_integer_test() {
@@ -331,19 +342,17 @@ mod tests {
             let mut input = BytesInputQueue::new(4, bytes);
             assert_eq!(u32::read(&mut input).unwrap(), 0xaa113297_u32);
         }
-        {
-            const F: i64 = 33125;
-            const S: i32 = 3294634;
-            const T: u16 = 3219;
-            let mut output = BytesOutputQueue::new();
-            F.write(&mut output).unwrap();
-            S.write(&mut output).unwrap();
-            T.write(&mut output).unwrap();
-            let bytes = output.get_bytes();
-            let mut input = BytesInputQueue::new(bytes.len(), bytes);
-            assert_eq!(i64::read(&mut input).unwrap(), F);
-            assert_eq!(i32::read(&mut input).unwrap(), S);
-            assert_eq!(u16::read(&mut input).unwrap(), T);
+        test_macro! {
+            i64 => 321953285_i64
+            u64 => 32194325340956843_u64
+            i32 => 329853_i32
+            u32 => 2035936534_u32
+            i16 => 32474_i16
+            u16 => 6886_u16
+            u8 => 244_u8
+            i8 => -120_i8
+            bool => true
+            bool => false
         }
     }
 
@@ -385,16 +394,79 @@ mod tests {
             );
             assert_eq!(VarInt::read(&mut input).unwrap(), VarInt(-1));
         }
+        {
+            let mut output = BytesOutputQueue::new();
+            VarLong(-1).write(&mut output).unwrap();
+            assert_eq!(output.get_bytes().to_vec(), vec![255, 255, 255, 255, 255, 255, 255, 255, 255, 1]);
+        }
+        {
+            let mut output = BytesOutputQueue::new();
+            VarLong(2147483647).write(&mut output).unwrap();
+            assert_eq!(output.get_bytes().to_vec(), vec![255, 255, 255, 255, 7]);
+        }
+        {
+            let mut output = BytesOutputQueue::new();
+            VarLong(-2147483648).write(&mut output).unwrap();
+            assert_eq!(output.get_bytes().to_vec(), vec![128, 128, 128, 128, 248, 255, 255, 255, 255, 1])
+        }
+        test_macro!(
+            VarInt => VarInt(32)
+            VarInt => VarInt(-1)
+            VarLong => VarLong(-3231)
+            VarLong => VarLong(-32)
+            VarLong => VarLong(32186094)
+            VarLong => VarLong(-321936749532)
+        );
     }
 
     #[test]
     fn success_string_test() {
-        {
-            const S: &str = "jenya705 is the best";
-            let mut output = BytesOutputQueue::new();
-            S.to_string().write(&mut output).unwrap();
-            let mut input = BytesInputQueue::new_without_slice(output.get_bytes());
-            assert_eq!(String::read(&mut input).unwrap(), S);
+        test_macro! {
+            String => "jenya705 is the best".to_string()
         }
+        // test for not ascii characters
+        test_macro! {
+            String => "я самый лучший".to_string()
+        }
+    }
+
+    #[test]
+    fn success_block_position_test() {
+        test_macro! {
+            BlockPosition => BlockPosition::new(1, 1, 1)
+            BlockPosition => BlockPosition::new(-321, 32, -32)
+            BlockPosition => BlockPosition::new(-320, 32, -3123)
+            BlockPosition => BlockPosition::new(321, 255, -325837)
+        }
+    }
+
+    #[test]
+    fn success_chat_test() {
+        test_macro! {
+            ComponentType => ComponentType::Text({
+                let mut component = TextComponent::new("hi!".into());
+                component.base.bold = Some(true);
+                component.base.extra.push({
+                    let mut component = TextComponent::new("bye!".into());
+                    component.base.color = Some(DefaultColor::Red.into());
+                    component.into()
+                });
+                component
+            })
+        }
+    }
+
+    #[test]
+    fn success_compound_test() {
+        test_macro!(
+            u32 => 0_u32
+            u16 => 12_u16
+            u8 => 32_u8
+            VarInt => VarInt(-1)
+            VarLong => VarLong(32)
+            VarLong => VarLong(-2)
+            String => "some_string".to_string()
+            BlockPosition => BlockPosition::new(32321, 233, -32325)
+        );
     }
 }
