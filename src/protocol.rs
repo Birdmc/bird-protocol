@@ -1,3 +1,5 @@
+use std::f32::consts::PI;
+use std::marker::PhantomData;
 use crate::bytes::{InputByteQueue, InputByteQueueError, OutputByteQueue};
 use std::mem;
 use std::str::{from_utf8, Utf8Error};
@@ -16,6 +18,8 @@ pub enum WriteError {
 pub enum ReadError {
     BadVarNum,
     BadUtf8(Utf8Error),
+    BadEntityDataType(i32, i32),
+    BadEntityDataIndex(u8),
     BadStringLimit(i32),
     BadIdentifier(IdentifierError),
     BadJson(serde_json::Error),
@@ -54,8 +58,8 @@ impl From<InputByteQueueError> for ReadError {
 
 macro_rules! delegate_type {
     ($name: ident, $delegates: ident) => {
-        #[derive(Copy, Clone, Debug, Default, PartialEq, PartialOrd, Hash)]
-        pub struct $name($delegates);
+        #[derive(Copy, Clone, Debug, Default, PartialEq, PartialOrd)]
+        pub struct $name(pub $delegates);
 
         impl From<$delegates> for $name {
             fn from(val: $delegates) -> Self {
@@ -126,6 +130,16 @@ macro_rules! protocol_var_num_type {
                 Ok($type::from(value))
             }
         }
+
+        impl SizeNumber for $type {
+            fn as_size(&self) -> usize {
+                self.0 as usize
+            }
+
+            fn new_from_size(size: usize) -> Self {
+                $type::from(size as $num_type)
+            }
+        }
     }
 }
 
@@ -135,6 +149,18 @@ pub trait Writable {
 
 pub trait Readable: Sized {
     fn read(input: &mut impl InputByteQueue) -> Result<Self, ReadError>;
+}
+
+impl<T> Writable for PhantomData<T> {
+    fn write(&self, _: &mut impl OutputByteQueue) -> Result<(), WriteError> {
+        Ok(())
+    }
+}
+
+impl<T> Readable for PhantomData<T> {
+    fn read(_: &mut impl InputByteQueue) -> Result<Self, ReadError> {
+        Ok(PhantomData)
+    }
 }
 
 impl Writable for u8 {
@@ -304,6 +330,141 @@ impl Writable for BlockPosition {
     }
 }
 
+impl<T: Readable> Readable for Option<T> {
+    fn read(input: &mut impl InputByteQueue) -> Result<Self, ReadError> {
+        let provided = bool::read(input)?;
+        Ok(match provided {
+            true => Some(T::read(input)?),
+            false => None
+        })
+    }
+}
+
+impl<T: Writable> Writable for Option<T> {
+    fn write(&self, output: &mut impl OutputByteQueue) -> Result<(), WriteError> {
+        match self {
+            None => false.write(output),
+            Some(val) => {
+                true.write(output)?;
+                val.write(output)
+            }
+        }
+    }
+}
+
+#[derive(Clone, PartialOrd, PartialEq, Debug)]
+pub struct RemainingBytesArray<T> {
+    pub result: Vec<T>,
+}
+
+#[derive(Clone, PartialOrd, PartialEq, Debug)]
+pub struct LengthProvidedArray<T, L> {
+    pub result: Vec<T>,
+    size: PhantomData<L>,
+}
+
+impl<T> RemainingBytesArray<T> {
+    pub fn new(result: Vec<T>) -> RemainingBytesArray<T> {
+        RemainingBytesArray { result }
+    }
+}
+
+impl<T: Readable> Readable for RemainingBytesArray<T> {
+    fn read(input: &mut impl InputByteQueue) -> Result<Self, ReadError> {
+        let mut result = Vec::new();
+        while input.has_bytes(1) {
+            result.push(T::read(input)?)
+        }
+        Ok(RemainingBytesArray {
+            result
+        })
+    }
+}
+
+impl<T: Writable> Writable for RemainingBytesArray<T> {
+    fn write(&self, output: &mut impl OutputByteQueue) -> Result<(), WriteError> {
+        for element in &self.result {
+            element.write(output)?
+        }
+        Ok(())
+    }
+}
+
+pub trait SizeNumber {
+    fn as_size(&self) -> usize;
+
+    fn new_from_size(size: usize) -> Self;
+}
+
+macro_rules! primitive_size_number {
+    ($type: ident) => {
+        impl SizeNumber for $type {
+            fn as_size(&self) -> usize {
+                *self as usize
+            }
+
+            fn new_from_size(size: usize) -> Self {
+                size as $type
+            }
+        }
+    }
+}
+
+primitive_size_number!(usize);
+primitive_size_number!(u128);
+primitive_size_number!(i128);
+primitive_size_number!(u64);
+primitive_size_number!(i64);
+primitive_size_number!(u32);
+primitive_size_number!(i32);
+primitive_size_number!(u16);
+primitive_size_number!(i16);
+primitive_size_number!(u8);
+primitive_size_number!(i8);
+
+impl<T, L> LengthProvidedArray<T, L> {
+    pub fn new(result: Vec<T>) -> LengthProvidedArray<T, L> {
+        LengthProvidedArray { result, size: PhantomData }
+    }
+}
+
+impl<T: Readable, L: Readable + SizeNumber> Readable for LengthProvidedArray<T, L> {
+    fn read(input: &mut impl InputByteQueue) -> Result<Self, ReadError> {
+        let size = L::read(input)?.as_size();
+        let mut result = Vec::new();
+        for _ in 0..size {
+            result.push(T::read(input)?);
+        }
+        Ok(LengthProvidedArray::new(result))
+    }
+}
+
+impl<T: Writable, L: Writable + SizeNumber> Writable for LengthProvidedArray<T, L> {
+    fn write(&self, output: &mut impl OutputByteQueue) -> Result<(), WriteError> {
+        L::new_from_size(self.result.len()).write(output)?;
+        for element in &self.result {
+            element.write(output)?;
+        }
+        Ok(())
+    }
+}
+
+delegate_type!(Angle, f32);
+
+impl Readable for Angle {
+    fn read(input: &mut impl InputByteQueue) -> Result<Self, ReadError> {
+        Ok(Angle::from(
+            (u8::read(input)? as f32) * PI / 256.0
+        ))
+    }
+}
+
+impl Writable for Angle {
+    fn write(&self, output: &mut impl OutputByteQueue) -> Result<(), WriteError> {
+        (self.0 * 256.0 / PI).write(output) 
+    }
+}
+
 #[cfg(all(test, feature = "tokio-bytes"))]
 mod tests {
     use super::*;
@@ -378,19 +539,19 @@ mod tests {
         }
         {
             let mut input = BytesInputQueue::new(
-                1, BytesMut::from_iter(vec![0])
+                1, BytesMut::from_iter(vec![0]),
             );
             assert_eq!(VarInt::read(&mut input).unwrap(), VarInt(0));
         }
         {
             let mut input = BytesInputQueue::new(
-                3, BytesMut::from_iter(vec![255, 255, 127])
+                3, BytesMut::from_iter(vec![255, 255, 127]),
             );
             assert_eq!(VarInt::read(&mut input).unwrap(), VarInt(2097151));
         }
         {
             let mut input = BytesInputQueue::new(
-                5, BytesMut::from_iter(vec![255, 255, 255, 255, 15])
+                5, BytesMut::from_iter(vec![255, 255, 255, 255, 15]),
             );
             assert_eq!(VarInt::read(&mut input).unwrap(), VarInt(-1));
         }
@@ -453,6 +614,28 @@ mod tests {
                 });
                 component
             })
+        }
+    }
+
+    #[test]
+    fn success_remaining_bytes_array_test() {
+        test_macro! {
+            RemainingBytesArray => RemainingBytesArray::new(vec![32_u8, 233_u8, 211_u8])
+        }
+        test_macro! {
+            RemainingBytesArray => RemainingBytesArray::new(vec![VarInt(-1), VarInt(325), VarInt(3219538)])
+        }
+    }
+
+    #[test]
+    fn success_length_provided_array_test() {
+        test_macro! {
+            LengthProvidedArray => LengthProvidedArray::<VarInt, i16>::new(
+                vec![VarInt(321), VarInt(-312325), VarInt(328138)]
+            )
+            LengthProvidedArray => LengthProvidedArray::<String, VarInt>::new(
+                vec!["hello!".to_string(), "poka".to_string(), "dadada".to_string()]
+            )
         }
     }
 

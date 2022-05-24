@@ -1,3 +1,8 @@
+[workspace]
+members = [
+    "p1_18_2",
+]
+
 [package]
 name = "cubic-protocol"
 version = "0.1.0"
