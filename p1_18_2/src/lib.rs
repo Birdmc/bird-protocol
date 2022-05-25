@@ -10,6 +10,8 @@ protocol_enum! {
 protocol_packets! {
     757, 1_18_2 => {
         Handshake {
+            Client {
+            }
             Server {
                 0x00, Handshaking {
                     protocol_version: VarInt,
@@ -72,6 +74,12 @@ protocol_packets! {
                     successful: bool,
                     data: RemainingBytesArray<u8>,
                 }
+            }
+        }
+        Play {
+            Client {
+            }
+            Server {
             }
         }
     }

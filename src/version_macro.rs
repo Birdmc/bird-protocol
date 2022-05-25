@@ -32,6 +32,79 @@ macro_rules! protocol_enum {
 }
 
 #[macro_export]
+macro_rules! bound_state_enum {
+    (Server, Handshake, $($id: expr, $name: ident)*) => {
+        bound_state_enum_impl!(SHPacket, $($id, $name)*);
+    };
+    (Server, Status, $($id: expr, $name: ident)*) => {
+        bound_state_enum_impl!(SSPacket, $($id, $name)*);
+    };
+    (Server, Login, $($id: expr, $name: ident)*) => {
+        bound_state_enum_impl!(SLPacket, $($id, $name)*);
+    };
+    (Server, Play, $($id: expr, $name: ident)*) => {
+        bound_state_enum_impl!(SPPacket, $($id, $name)*);
+    };
+    (Client, Handshake, $($id: expr, $name: ident)*) => {
+        bound_state_enum_impl!(CHPacket, $($id, $name)*);
+    };
+    (Client, Status, $($id: expr, $name: ident)*) => {
+        bound_state_enum_impl!(CSPacket, $($id, $name)*);
+    };
+    (Client, Login, $($id: expr, $name: ident)*) => {
+        bound_state_enum_impl!(CLPacket, $($id, $name)*);
+    };
+    (Client, Play, $($id: expr, $name: ident)*) => {
+        bound_state_enum_impl!(CPPacket, $($id, $name)*);
+    };
+}
+
+#[macro_export]
+macro_rules! bound_packet_enum {
+    ($name: ident, $hp: ident, $sp: ident, $lp: ident, $pp: ident) => {
+        impl $name {
+            pub fn read(state: State, output: &mut impl InputByteQueue) -> Result<Self, ReadError> {
+                Ok(match state {
+                    State::Handshake => Self::Handshake($hp::read(output)?),
+                    State::Status => Self::Status($sp::read(output)?),
+                    State::Login => Self::Login($lp::read(output)?),
+                    State::Play => Self::Play($pp::read(output)?),
+                })
+            }
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! bound_state_enum_impl {
+    ($e_name: ident, $($id: expr, $name: ident)*) => {
+        #[derive(Debug)]
+        pub enum $e_name {
+            $($name($name),)*
+        }
+
+        impl Writable for $e_name {
+            fn write(&self, output: &mut impl OutputByteQueue) -> Result<(), WriteError> {
+                match self {
+                    $(Self::$name(val) => val.write(output),)*
+                    o => unreachable!("unreachable. That object wasn't handled: {:?}", o)
+                }
+            }
+        }
+
+        impl Readable for $e_name {
+            fn read(input: &mut impl InputByteQueue) -> Result<Self, ReadError> {
+                let num: i32 = VarInt::read(input)?.into();
+                match num {
+                    $($id => Ok(Self::$name($name::read(input)?)),)*
+                    _ => Err(ReadError::BadEnumValue),
+                }
+            }
+        }
+    }
+}
+
+#[macro_export]
 macro_rules! protocol_packets {
     ($protocol: expr, $protocol_name: expr => {$(
         $state: ident {$(
@@ -49,45 +122,71 @@ macro_rules! protocol_packets {
         use cubic_chat::component::*;
         use cubic_chat::identifier::*;
         use uuid::Uuid;
-        $($($(
-            #[derive(Debug)]
-            pub struct $name {
-                $(pub $var_name: $var_type,)*
-            }
+        $(
+            $(
 
-            impl Packet for $name {
-                fn id() -> i32 {
-                    $id
-                }
+                $crate::bound_state_enum!($bound, $state, $($id, $name)*);
 
-                fn bound() -> Bound {
-                    Bound::$bound
-                }
+                $(
+                    #[derive(Debug)]
+                    pub struct $name {
+                        $(pub $var_name: $var_type,)*
+                    }
 
-                fn state() -> State {
-                    State::$state
-                }
+                    impl Packet for $name {
+                        fn id() -> i32 {
+                            $id
+                        }
 
-                fn protocol() -> i32 {
-                    $protocol
-                }
-            }
+                        fn bound() -> Bound {
+                            Bound::$bound
+                        }
 
-            impl Writable for $name {
-                fn write(&self, output: &mut impl OutputByteQueue) -> Result<(), WriteError> {
-                    VarInt(Self::id()).write(output)?;
-                    $(self.$var_name.write(output)?;)*
-                    Ok(())
-                }
-            }
+                        fn state() -> State {
+                            State::$state
+                        }
 
-            impl Readable for $name {
-                fn read(input: &mut impl InputByteQueue) -> Result<Self, ReadError> {
-                    Ok(Self {
-                        $($var_name: <$var_type as Readable>::read(input)?,)*
-                    })
-                }
-            }
-        )*)*)*
+                        fn protocol() -> i32 {
+                            $protocol
+                        }
+                    }
+
+                    impl Writable for $name {
+                        fn write(&self, output: &mut impl OutputByteQueue) -> Result<(), WriteError> {
+                            VarInt(Self::id()).write(output)?;
+                            $(self.$var_name.write(output)?;)*
+                            Ok(())
+                        }
+                    }
+
+                    impl Readable for $name {
+                        fn read(input: &mut impl InputByteQueue) -> Result<Self, ReadError> {
+                            Ok(Self {
+                                $($var_name: <$var_type as Readable>::read(input)?,)*
+                            })
+                        }
+                    }
+                )*
+            )*
+        )*
+
+        #[derive(Debug)]
+        pub enum ClientPacket {
+            Handshake(CHPacket),
+            Status(CSPacket),
+            Login(CLPacket),
+            Play(CPPacket),
+        }
+
+        #[derive(Debug)]
+        pub enum ServerPacket {
+            Handshake(SHPacket),
+            Status(SSPacket),
+            Login(SLPacket),
+            Play(SPPacket),
+       }
+
+        $crate::bound_packet_enum!(ClientPacket, CHPacket, CSPacket, CLPacket, CPPacket);
+        $crate::bound_packet_enum!(ServerPacket, SHPacket, SSPacket, SLPacket, SPPacket);
     }
 }
