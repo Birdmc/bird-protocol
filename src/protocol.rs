@@ -20,6 +20,7 @@ pub enum ReadError {
     BadUtf8(Utf8Error),
     BadEntityDataType(i32, i32),
     BadEntityDataIndex(u8),
+    BadEnumValue,
     BadStringLimit(i32),
     BadIdentifier(IdentifierError),
     BadJson(serde_json::Error),
@@ -369,6 +370,18 @@ impl<T> RemainingBytesArray<T> {
     }
 }
 
+impl<T> From<Vec<T>> for RemainingBytesArray<T> {
+    fn from(v: Vec<T>) -> Self {
+        RemainingBytesArray::new(v)
+    }
+}
+
+impl<T> From<RemainingBytesArray<T>> for Vec<T> {
+    fn from(arr: RemainingBytesArray<T>) -> Self {
+        arr.result
+    }
+}
+
 impl<T: Readable> Readable for RemainingBytesArray<T> {
     fn read(input: &mut impl InputByteQueue) -> Result<Self, ReadError> {
         let mut result = Vec::new();
@@ -425,6 +438,18 @@ primitive_size_number!(i8);
 impl<T, L> LengthProvidedArray<T, L> {
     pub fn new(result: Vec<T>) -> LengthProvidedArray<T, L> {
         LengthProvidedArray { result, size: PhantomData }
+    }
+}
+
+impl<T, L> From<Vec<T>> for LengthProvidedArray<T, L> {
+    fn from(v: Vec<T>) -> Self {
+        LengthProvidedArray::new(v)
+    }
+}
+
+impl<T, L> From<LengthProvidedArray<T, L>> for Vec<T> {
+    fn from(arr: LengthProvidedArray<T, L>) -> Self {
+        arr.result
     }
 }
 

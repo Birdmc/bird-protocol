@@ -3,8 +3,9 @@ name = "p1_18_2"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+# See more keys and their definitioOutputBytns at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 cubic-protocol = { path = "../" }
 cubic-chat = "0.1.0"
+uuid = "1.0.0"
