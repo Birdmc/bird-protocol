@@ -24,8 +24,9 @@ impl BytesInputQueue {
     }
 }
 
+#[async_trait::async_trait]
 impl InputByteQueue for BytesInputQueue {
-    fn take_byte(&mut self) -> InputByteQueueResult<u8> {
+    async fn take_byte(&mut self) -> InputByteQueueResult<u8> {
         match self.length == self.offset {
             true => Err(InputByteQueueError::NoBytesLeft(self.offset, self.length)),
             false => {
@@ -36,7 +37,7 @@ impl InputByteQueue for BytesInputQueue {
         }
     }
 
-    fn take_bytes(&mut self, into: &mut [u8]) -> InputByteQueueResult<()> {
+    async fn take_bytes(&mut self, into: &mut [u8]) -> InputByteQueueResult<()> {
         match self.has_bytes(into.len()) {
             false => Err(InputByteQueueError::NoBytesLeft(self.length, self.length)),
             true => {
@@ -49,7 +50,7 @@ impl InputByteQueue for BytesInputQueue {
         }
     }
 
-    fn take_slice(&mut self, size: usize) -> InputByteQueueResult<&[u8]> {
+    async fn take_slice(&mut self, size: usize) -> InputByteQueueResult<&[u8]> {
         match self.has_bytes(size) {
             false => Err(InputByteQueueError::NoBytesLeft(self.length, self.length)),
             true => {

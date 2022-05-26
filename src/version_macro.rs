@@ -20,9 +20,10 @@ macro_rules! protocol_enum {
             }
         }
 
+        #[async_trait::async_trait]
         impl Readable for $name {
-            fn read(input: &mut impl InputByteQueue) -> Result<Self, ReadError> {
-                match <$type>::read(input)?.into() {
+            async fn read(input: &mut impl InputByteQueue) -> Result<Self, ReadError> {
+                match <$type>::read(input).await?.into() {
                     $($var_id => Ok(Self::$var_name),)*
                     _ => Err(ReadError::BadEnumValue),
                 }
@@ -63,12 +64,12 @@ macro_rules! bound_state_enum {
 macro_rules! bound_packet_enum {
     ($name: ident, $hp: ident, $sp: ident, $lp: ident, $pp: ident) => {
         impl $name {
-            pub fn read(state: State, output: &mut impl InputByteQueue) -> Result<Self, ReadError> {
+            pub async fn read(state: State, output: &mut impl InputByteQueue) -> Result<Self, ReadError> {
                 Ok(match state {
-                    State::Handshake => Self::Handshake($hp::read(output)?),
-                    State::Status => Self::Status($sp::read(output)?),
-                    State::Login => Self::Login($lp::read(output)?),
-                    State::Play => Self::Play($pp::read(output)?),
+                    State::Handshake => Self::Handshake($hp::read(output).await?),
+                    State::Status => Self::Status($sp::read(output).await?),
+                    State::Login => Self::Login($lp::read(output).await?),
+                    State::Play => Self::Play($pp::read(output).await?),
                 })
             }
         }
@@ -92,11 +93,12 @@ macro_rules! bound_state_enum_impl {
             }
         }
 
+        #[async_trait::async_trait]
         impl Readable for $e_name {
-            fn read(input: &mut impl InputByteQueue) -> Result<Self, ReadError> {
-                let num: i32 = VarInt::read(input)?.into();
+            async fn read(input: &mut impl InputByteQueue) -> Result<Self, ReadError> {
+                let num: i32 = VarInt::read(input).await?.into();
                 match num {
-                    $($id => Ok(Self::$name($name::read(input)?)),)*
+                    $($id => Ok(Self::$name($name::read(input).await?)),)*
                     _ => Err(ReadError::BadEnumValue),
                 }
             }
@@ -159,10 +161,11 @@ macro_rules! protocol_packets {
                         }
                     }
 
+                    #[async_trait::async_trait]
                     impl Readable for $name {
-                        fn read(input: &mut impl InputByteQueue) -> Result<Self, ReadError> {
+                        async fn read(input: &mut impl InputByteQueue) -> Result<Self, ReadError> {
                             Ok(Self {
-                                $($var_name: <$var_type as Readable>::read(input)?,)*
+                                $($var_name: <$var_type as Readable>::read(input).await?,)*
                             })
                         }
                     }

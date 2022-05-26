@@ -8,12 +8,13 @@ pub enum InputByteQueueError {
 
 pub type InputByteQueueResult<T> = Result<T, InputByteQueueError>;
 
-pub trait InputByteQueue {
-    fn take_byte(&mut self) -> InputByteQueueResult<u8>;
+#[async_trait::async_trait]
+pub trait InputByteQueue: Sync + Send {
+    async fn take_byte(&mut self) -> InputByteQueueResult<u8>;
 
-    fn take_bytes(&mut self, into: &mut [u8]) -> InputByteQueueResult<()>;
+    async fn take_bytes(&mut self, into: &mut [u8]) -> InputByteQueueResult<()>;
 
-    fn take_slice(&mut self, size: usize) -> InputByteQueueResult<&[u8]>;
+    async fn take_slice(&mut self, size: usize) -> InputByteQueueResult<&[u8]>;
 
     fn has_bytes(&mut self, bytes: usize) -> bool;
 

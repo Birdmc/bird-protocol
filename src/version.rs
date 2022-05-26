@@ -43,15 +43,15 @@ pub mod entity {
     }
 
     impl<T: Readable + Sized> EntityDataEntry<T> {
-        pub fn read(input: &mut impl InputByteQueue, index: u8, value_type_id: i32) -> Result<Self, ReadError> {
+        pub async fn read(input: &mut impl InputByteQueue, index: u8, value_type_id: i32) -> Result<Self, ReadError> {
             Ok(EntityDataEntry {
                 index, value_type_id,
-                value: T::read(input)?
+                value: T::read(input).await?
             })
         }
 
-        pub fn read_value_type_id(input: &mut impl InputByteQueue) -> Result<i32, ReadError> {
-            VarInt::read(input).map(|val| val.into())
+        pub async fn read_value_type_id(input: &mut impl InputByteQueue) -> Result<i32, ReadError> {
+            VarInt::read(input).await.map(|val| val.into())
         }
 
         pub fn is_end(index: u8) -> bool {

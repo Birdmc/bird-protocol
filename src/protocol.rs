@@ -85,10 +85,10 @@ macro_rules! protocol_num_type {
             }
         }
 
-        impl Readable for $type {
-            fn read(input: &mut impl InputByteQueue) -> Result<Self, ReadError> {
+        #[async_trait::async_trait] impl Readable for $type {
+            async fn read(input: &mut impl InputByteQueue) -> Result<Self, ReadError> {
                 let mut bytes = [0_u8; mem::size_of::<$type>()];
-                input.take_bytes(&mut bytes)?;
+                input.take_bytes(&mut bytes).await?;
                 Ok($type::from_le_bytes(bytes))
             }
         }
@@ -112,13 +112,13 @@ macro_rules! protocol_var_num_type {
             }
         }
 
-        impl Readable for $type {
-            fn read(input: &mut impl InputByteQueue) -> Result<Self, ReadError> {
+        #[async_trait::async_trait] impl Readable for $type {
+            async fn read(input: &mut impl InputByteQueue) -> Result<Self, ReadError> {
                 const BITS: $num_type = (mem::size_of::<$num_type>() * 8) as $num_type;
                 let mut value: $num_type = 0;
                 let mut position: $num_type = 0;
                 loop {
-                    let current_byte = input.take_byte()? as $num_type;
+                    let current_byte = input.take_byte().await? as $num_type;
                     value |= (current_byte & 0x7f) << position;
                     if ((current_byte & 0x80) == 0) {
                         break;
@@ -148,8 +148,9 @@ pub trait Writable {
     fn write(&self, output: &mut impl OutputByteQueue) -> Result<(), WriteError>;
 }
 
+#[async_trait::async_trait]
 pub trait Readable: Sized {
-    fn read(input: &mut impl InputByteQueue) -> Result<Self, ReadError>;
+    async fn read(input: &mut impl InputByteQueue) -> Result<Self, ReadError>;
 }
 
 impl<T> Writable for PhantomData<T> {
@@ -158,8 +159,9 @@ impl<T> Writable for PhantomData<T> {
     }
 }
 
+#[async_trait::async_trait]
 impl<T> Readable for PhantomData<T> {
-    fn read(_: &mut impl InputByteQueue) -> Result<Self, ReadError> {
+    async fn read(_: &mut impl InputByteQueue) -> Result<Self, ReadError> {
         Ok(PhantomData)
     }
 }
@@ -171,9 +173,10 @@ impl Writable for u8 {
     }
 }
 
+#[async_trait::async_trait]
 impl Readable for u8 {
-    fn read(input: &mut impl InputByteQueue) -> Result<Self, ReadError> {
-        Ok(input.take_byte()?)
+    async fn read(input: &mut impl InputByteQueue) -> Result<Self, ReadError> {
+        Ok(input.take_byte().await?)
     }
 }
 
@@ -183,9 +186,10 @@ impl Writable for i8 {
     }
 }
 
+#[async_trait::async_trait]
 impl Readable for i8 {
-    fn read(input: &mut impl InputByteQueue) -> Result<Self, ReadError> {
-        u8::read(input).map(|val| val as i8)
+    async fn read(input: &mut impl InputByteQueue) -> Result<Self, ReadError> {
+        u8::read(input).await.map(|val| val as i8)
     }
 }
 
@@ -198,9 +202,10 @@ impl Writable for bool {
     }
 }
 
+#[async_trait::async_trait]
 impl Readable for bool {
-    fn read(input: &mut impl InputByteQueue) -> Result<Self, ReadError> {
-        u8::read(input).map(|val| val != 0)
+    async fn read(input: &mut impl InputByteQueue) -> Result<Self, ReadError> {
+        u8::read(input).await.map(|val| val != 0)
     }
 }
 
@@ -220,10 +225,11 @@ delegate_type!(VarLong, i64);
 protocol_var_num_type!(VarInt, i32, u32);
 protocol_var_num_type!(VarLong, i64, u64);
 
+#[async_trait::async_trait]
 impl Readable for Uuid {
-    fn read(input: &mut impl InputByteQueue) -> Result<Self, ReadError> {
+    async fn read(input: &mut impl InputByteQueue) -> Result<Self, ReadError> {
         let mut bytes = [0_u8; 16];
-        input.take_bytes(&mut bytes)?;
+        input.take_bytes(&mut bytes).await?;
         Ok(Uuid::from_bytes(bytes))
     }
 }
@@ -238,20 +244,21 @@ impl Writable for Uuid {
 const STRING_LIMIT: i32 = 32767;
 const CHAT_LIMIT: i32 = 262144;
 
-fn read_string_with_limit(input: &mut impl InputByteQueue, limit: i32) -> Result<String, ReadError> {
-    let length: i32 = VarInt::read(input)?.into();
+async fn read_string_with_limit(input: &mut impl InputByteQueue, limit: i32) -> Result<String, ReadError> {
+    let length: i32 = VarInt::read(input).await?.into();
     match length > limit {
         true => Err(ReadError::BadStringLimit(limit)),
         false => {
-            let slice = input.take_slice(length as usize)?;
+            let slice = input.take_slice(length as usize).await?;
             Ok(from_utf8(slice)?.into())
         }
     }
 }
 
+#[async_trait::async_trait]
 impl Readable for String {
-    fn read(input: &mut impl InputByteQueue) -> Result<Self, ReadError> {
-        read_string_with_limit(input, STRING_LIMIT)
+    async fn read(input: &mut impl InputByteQueue) -> Result<Self, ReadError> {
+        read_string_with_limit(input, STRING_LIMIT).await
     }
 }
 
@@ -263,9 +270,10 @@ impl Writable for String {
     }
 }
 
+#[async_trait::async_trait]
 impl Readable for Identifier {
-    fn read(input: &mut impl InputByteQueue) -> Result<Self, ReadError> {
-        let str = String::read(input)?;
+    async fn read(input: &mut impl InputByteQueue) -> Result<Self, ReadError> {
+        let str = String::read(input).await?;
         Ok(Identifier::from_full(str)?)
     }
 }
@@ -276,9 +284,10 @@ impl Writable for Identifier {
     }
 }
 
+#[async_trait::async_trait]
 impl Readable for ComponentType {
-    fn read(input: &mut impl InputByteQueue) -> Result<Self, ReadError> {
-        let str = read_string_with_limit(input, CHAT_LIMIT)?;
+    async fn read(input: &mut impl InputByteQueue) -> Result<Self, ReadError> {
+        let str = read_string_with_limit(input, CHAT_LIMIT).await?;
         Ok(serde_json::from_str(&*str)?)
     }
 }
@@ -300,9 +309,10 @@ const BLOCK_X_NEG_BOUND: i32 = 1 << 25;
 const BLOCK_Z_NEG_BOUND: i32 = BLOCK_X_NEG_BOUND;
 const BLOCK_Y_NEG_BOUND: i32 = 1 << 11;
 
+#[async_trait::async_trait]
 impl Readable for BlockPosition {
-    fn read(input: &mut impl InputByteQueue) -> Result<Self, ReadError> {
-        let val = u64::read(input)?;
+    async fn read(input: &mut impl InputByteQueue) -> Result<Self, ReadError> {
+        let val = u64::read(input).await?;
         let mut x = (val >> 38) as i32;
         let mut z = ((val >> 12) & BLOCK_Z_MASK) as i32;
         let mut y = (val & BLOCK_Y_MASK) as i32;
@@ -331,11 +341,12 @@ impl Writable for BlockPosition {
     }
 }
 
+#[async_trait::async_trait]
 impl<T: Readable> Readable for Option<T> {
-    fn read(input: &mut impl InputByteQueue) -> Result<Self, ReadError> {
-        let provided = bool::read(input)?;
+    async fn read(input: &mut impl InputByteQueue) -> Result<Self, ReadError> {
+        let provided = bool::read(input).await?;
         Ok(match provided {
-            true => Some(T::read(input)?),
+            true => Some(T::read(input).await?),
             false => None
         })
     }
@@ -382,11 +393,12 @@ impl<T> From<RemainingBytesArray<T>> for Vec<T> {
     }
 }
 
-impl<T: Readable> Readable for RemainingBytesArray<T> {
-    fn read(input: &mut impl InputByteQueue) -> Result<Self, ReadError> {
+#[async_trait::async_trait]
+impl<T: Readable + Send + Sync> Readable for RemainingBytesArray<T> {
+    async fn read(input: &mut impl InputByteQueue) -> Result<Self, ReadError> {
         let mut result = Vec::new();
         while input.has_bytes(1) {
-            result.push(T::read(input)?)
+            result.push(T::read(input).await?)
         }
         Ok(RemainingBytesArray {
             result
@@ -453,12 +465,13 @@ impl<T, L> From<LengthProvidedArray<T, L>> for Vec<T> {
     }
 }
 
-impl<T: Readable, L: Readable + SizeNumber> Readable for LengthProvidedArray<T, L> {
-    fn read(input: &mut impl InputByteQueue) -> Result<Self, ReadError> {
-        let size = L::read(input)?.as_size();
+#[async_trait::async_trait]
+impl<T: Readable + Send + Sync, L: Readable + SizeNumber> Readable for LengthProvidedArray<T, L> {
+    async fn read(input: &mut impl InputByteQueue) -> Result<Self, ReadError> {
+        let size = L::read(input).await?.as_size();
         let mut result = Vec::new();
         for _ in 0..size {
-            result.push(T::read(input)?);
+            result.push(T::read(input).await?);
         }
         Ok(LengthProvidedArray::new(result))
     }
@@ -476,17 +489,18 @@ impl<T: Writable, L: Writable + SizeNumber> Writable for LengthProvidedArray<T, 
 
 delegate_type!(Angle, f32);
 
+#[async_trait::async_trait]
 impl Readable for Angle {
-    fn read(input: &mut impl InputByteQueue) -> Result<Self, ReadError> {
+    async fn read(input: &mut impl InputByteQueue) -> Result<Self, ReadError> {
         Ok(Angle::from(
-            (u8::read(input)? as f32) * PI / 256.0
+            (u8::read(input).await? as f32) * PI / 256.0
         ))
     }
 }
 
 impl Writable for Angle {
     fn write(&self, output: &mut impl OutputByteQueue) -> Result<(), WriteError> {
-        (self.0 * 256.0 / PI).write(output) 
+        (self.0 * 256.0 / PI).write(output)
     }
 }
 
