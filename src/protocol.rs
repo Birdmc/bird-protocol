@@ -517,12 +517,12 @@ mod tests {
             let mut output = BytesOutputQueue::new();
             $($value.write(&mut output).unwrap();)*
             let mut input = BytesInputQueue::new_without_slice(output.get_bytes());
-            $(assert_eq!($type::read(&mut input).unwrap(), $value);)*
+            $(assert_eq!($type::read(&mut input).await.unwrap(), $value);)*
         }
     }
 
-    #[test]
-    fn success_integer_test() {
+    #[actix_rt::test]
+    async fn success_integer_test() {
         {
             let mut output = BytesOutputQueue::new();
             0xff321233_u32.write(&mut output).unwrap();
@@ -540,7 +540,7 @@ mod tests {
             bytes.put_u8(0x11);
             bytes.put_u8(0xaa);
             let mut input = BytesInputQueue::new(4, bytes);
-            assert_eq!(u32::read(&mut input).unwrap(), 0xaa113297_u32);
+            assert_eq!(u32::read(&mut input).await.unwrap(), 0xaa113297_u32);
         }
         test_macro! {
             i64 => 321953285_i64
@@ -556,8 +556,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn success_var_num_test() {
+    #[actix_rt::test]
+    async fn success_var_num_test() {
         {
             let mut output = BytesOutputQueue::new();
             VarInt(0).write(&mut output).unwrap();
@@ -580,19 +580,19 @@ mod tests {
             let mut input = BytesInputQueue::new(
                 1, BytesMut::from_iter(vec![0]),
             );
-            assert_eq!(VarInt::read(&mut input).unwrap(), VarInt(0));
+            assert_eq!(VarInt::read(&mut input).await.unwrap(), VarInt(0));
         }
         {
             let mut input = BytesInputQueue::new(
                 3, BytesMut::from_iter(vec![255, 255, 127]),
             );
-            assert_eq!(VarInt::read(&mut input).unwrap(), VarInt(2097151));
+            assert_eq!(VarInt::read(&mut input).await.unwrap(), VarInt(2097151));
         }
         {
             let mut input = BytesInputQueue::new(
                 5, BytesMut::from_iter(vec![255, 255, 255, 255, 15]),
             );
-            assert_eq!(VarInt::read(&mut input).unwrap(), VarInt(-1));
+            assert_eq!(VarInt::read(&mut input).await.unwrap(), VarInt(-1));
         }
         {
             let mut output = BytesOutputQueue::new();
@@ -619,8 +619,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn success_string_test() {
+    #[actix_rt::test]
+    async fn success_string_test() {
         test_macro! {
             String => "jenya705 is the best".to_string()
         }
@@ -630,8 +630,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn success_block_position_test() {
+    #[actix_rt::test]
+    async fn success_block_position_test() {
         test_macro! {
             BlockPosition => BlockPosition::new(1, 1, 1)
             BlockPosition => BlockPosition::new(-321, 32, -32)
@@ -640,8 +640,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn success_chat_test() {
+    #[actix_rt::test]
+    async fn success_chat_test() {
         test_macro! {
             ComponentType => ComponentType::Text({
                 let mut component = TextComponent::new("hi!".into());
@@ -656,8 +656,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn success_remaining_bytes_array_test() {
+    #[actix_rt::test]
+    async fn success_remaining_bytes_array_test() {
         test_macro! {
             RemainingBytesArray => RemainingBytesArray::new(vec![32_u8, 233_u8, 211_u8])
         }
@@ -666,8 +666,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn success_length_provided_array_test() {
+    #[actix_rt::test]
+    async fn success_length_provided_array_test() {
         test_macro! {
             LengthProvidedArray => LengthProvidedArray::<VarInt, i16>::new(
                 vec![VarInt(321), VarInt(-312325), VarInt(328138)]
@@ -678,8 +678,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn success_compound_test() {
+    #[actix_rt::test]
+    async fn success_compound_test() {
         test_macro!(
             u32 => 0_u32
             u16 => 12_u16

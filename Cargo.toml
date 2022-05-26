@@ -23,3 +23,6 @@ uuid = "1.0.0"
 
 [features]
 tokio-bytes = ["dep:bytes"]
+
+[dev-dependencies]
+actix-rt = "*"
