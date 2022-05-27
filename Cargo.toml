@@ -27,4 +27,4 @@ uuid = "1.0.0"
 tokio-bytes = ["dep:bytes"]
 
 [dev-dependencies]
-actix-rt = "*"
+actix-rt = "2.7.0"
