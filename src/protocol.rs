@@ -249,8 +249,9 @@ async fn read_string_with_limit(input: &mut impl InputByteQueue, limit: i32) -> 
     match length > limit {
         true => Err(ReadError::BadStringLimit(limit)),
         false => {
-            let slice = input.take_slice(length as usize).await?;
-            Ok(from_utf8(slice)?.into())
+            let mut vec = Vec::with_capacity(length as usize);
+            input.take_vec(length as usize, &mut vec).await?;
+            Ok(from_utf8(vec.as_slice())?.into())
         }
     }
 }

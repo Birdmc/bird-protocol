@@ -14,7 +14,7 @@ pub trait InputByteQueue: Sync + Send {
 
     async fn take_bytes(&mut self, into: &mut [u8]) -> InputByteQueueResult<()>;
 
-    async fn take_slice(&mut self, size: usize) -> InputByteQueueResult<&[u8]>;
+    async fn take_vec(&mut self, length: usize, into: &mut Vec<u8>) -> InputByteQueueResult<()>;
 
     fn has_bytes(&mut self, bytes: usize) -> bool;
 

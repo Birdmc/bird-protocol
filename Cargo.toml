@@ -2,6 +2,8 @@
 members = [
     # protocols
     "p1_18_2",
+
+    "server",
 ]
 
 [package]

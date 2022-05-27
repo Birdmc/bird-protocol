@@ -50,13 +50,15 @@ impl InputByteQueue for BytesInputQueue {
         }
     }
 
-    async fn take_slice(&mut self, size: usize) -> InputByteQueueResult<&[u8]> {
-        match self.has_bytes(size) {
+    async fn take_vec(&mut self, length: usize, into: &mut Vec<u8>) -> InputByteQueueResult<()> {
+        match self.has_bytes(length) {
             false => Err(InputByteQueueError::NoBytesLeft(self.length, self.length)),
             true => {
-                let start = self.offset;
-                self.offset += size;
-                Ok(&self.bytes[start..self.offset])
+                for _ in 0..length {
+                    into.push(self.bytes[self.offset]);
+                    self.offset += 1;
+                }
+                Ok(())
             }
         }
     }
@@ -82,6 +84,10 @@ impl BytesOutputQueue {
 
     pub fn get_bytes(self) -> BytesMut {
         self.bytes
+    }
+
+    pub fn get_bytes_vec(self) -> Vec<u8> {
+        self.bytes.to_vec()
     }
 }
 

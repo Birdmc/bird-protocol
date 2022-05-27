@@ -1,4 +1,5 @@
-use crate::protocol::{Readable, Writable};
+use crate::bytes::{InputByteQueue};
+use crate::protocol::{Readable, ReadError, Writable};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Bound {
@@ -22,6 +23,11 @@ pub trait Packet: Writable + Readable {
     fn state() -> State;
 
     fn protocol() -> i32;
+}
+
+#[async_trait::async_trait]
+pub trait PacketNode: Sized {
+    async fn read(state: State, input: &mut impl InputByteQueue) -> Result<Self, ReadError>;
 }
 
 pub mod entity {

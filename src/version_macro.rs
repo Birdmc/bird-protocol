@@ -63,13 +63,14 @@ macro_rules! bound_state_enum {
 #[macro_export]
 macro_rules! bound_packet_enum {
     ($name: ident, $hp: ident, $sp: ident, $lp: ident, $pp: ident) => {
-        impl $name {
-            pub async fn read(state: State, output: &mut impl InputByteQueue) -> Result<Self, ReadError> {
+        #[async_trait::async_trait]
+        impl PacketNode for $name {
+            async fn read(state: State, input: &mut impl InputByteQueue) -> Result<Self, ReadError> {
                 Ok(match state {
-                    State::Handshake => Self::Handshake($hp::read(output).await?),
-                    State::Status => Self::Status($sp::read(output).await?),
-                    State::Login => Self::Login($lp::read(output).await?),
-                    State::Play => Self::Play($pp::read(output).await?),
+                    State::Handshake => Self::Handshake($hp::read(input).await?),
+                    State::Status => Self::Status($sp::read(input).await?),
+                    State::Login => Self::Login($lp::read(input).await?),
+                    State::Play => Self::Play($pp::read(input).await?),
                 })
             }
         }
