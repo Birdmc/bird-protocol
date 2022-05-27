@@ -73,7 +73,7 @@ impl Connection {
     }
 }
 
-impl<H: ProtocolServerHandler<R>, R: PacketNode + Send + Sync> ProtocolServer<H, R> {
+impl<H: ProtocolServerHandler<R> + 'static, R: PacketNode + Send + Sync + 'static> ProtocolServer<H, R> {
     pub async fn run(self) -> tokio::io::Result<()> {
         let server = Arc::new(self);
         let listener = TcpListener::bind(&server.host).await?;
@@ -88,8 +88,16 @@ impl<H: ProtocolServerHandler<R>, R: PacketNode + Send + Sync> ProtocolServer<H,
             let (connection, receiver) = Connection::new(addr);
             let connection = Arc::new(connection);
             let (read_half, write_half) = stream.into_split();
-            ProtocolServer::read(server.clone(), read_half, connection.clone());
-            ProtocolServer::write(server.clone(), write_half, connection.clone(), receiver);
+            let (connection_m, server_m) =
+                (connection.clone(), server.clone());
+            tokio::spawn(async move {
+                ProtocolServer::read(server_m, read_half, connection_m);
+            });
+            let (connection_m, server_m) =
+                (connection.clone(), server.clone());
+            tokio::spawn(async move {
+                ProtocolServer::write(server_m, write_half, connection_m, receiver);
+            });
         };
     }
 
