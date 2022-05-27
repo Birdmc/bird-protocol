@@ -1,3 +1,4 @@
+use log::debug;
 use tokio::io::AsyncReadExt;
 use tokio::net::tcp::{OwnedReadHalf};
 use crate::bytes::{InputByteQueue, InputByteQueueError, InputByteQueueResult};
@@ -13,25 +14,22 @@ pub struct ProtocolServerInputQueue<const BUFFER_SIZE: usize> {
 }
 
 impl<const BUFFER_SIZE: usize> ProtocolServerInputQueue<BUFFER_SIZE> {
-    pub async fn new(read: OwnedReadHalf) -> Result<ProtocolServerInputQueue<BUFFER_SIZE>, ReadError> {
-        let mut result = ProtocolServerInputQueue {
+    pub fn new(read: OwnedReadHalf) -> ProtocolServerInputQueue<BUFFER_SIZE> {
+        ProtocolServerInputQueue {
             read,
             buffer: [0; BUFFER_SIZE],
             offset: 0,
             length: 0,
             current_buffer_offset: 0,
             current_buffer_size: 0,
-        };
-        result.update().await?;
-        Ok(result)
+        }
     }
 
     pub async fn update(&mut self) -> Result<(), ReadError> {
         self.offset = 0;
         self.length = 5; // max size of VarInt
-        self.current_buffer_size = 0;
-        self.current_buffer_offset = 0;
         self.length = <VarInt as Readable>::read(self).await?.0 as usize;
+        self.offset = 0;
         Ok(())
     }
 
@@ -44,6 +42,8 @@ impl<const BUFFER_SIZE: usize> ProtocolServerInputQueue<BUFFER_SIZE> {
             0 => return Err(InputByteQueueError::Custom("TcpStream closed while reading".into())),
             n => n,
         };
+        debug!("Received chunk of data with size {}: {:?}",
+            self.current_buffer_size, &self.buffer[0..self.current_buffer_size]);
         Ok(())
     }
 }
@@ -62,7 +62,7 @@ macro_rules! take_slice {
                     $push_f(current);
                     current += 1;
                     $self.current_buffer_offset += 1;
-                    if current != $length {
+                    if current == $length {
                         break;
                     }
                 }

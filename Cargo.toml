@@ -11,11 +11,12 @@ license = "MIT"
 bytes = { version = "1.1.0", optional = true }
 tokio = { version = "1.18.2", features = ["full"], optional = true }
 log = { version = "0.4.17", optional = true }
+serde = { version = "1.0.137", features = ["derive"] }
 euclid = "0.22.7"
 cubic-chat = "0.1.0"
 serde_json = "1.0.81"
 async-trait = "0.1.53"
-uuid = "1.0.0"
+uuid = { version = "1.0.0", features = ["serde"] }
 
 [features]
 tokio-bytes = ["dep:bytes"]
@@ -24,3 +25,4 @@ server = ["dep:tokio", "tokio-bytes", "dep:log"]
 
 [dev-dependencies]
 actix-rt = "2.7.0"
+simple_logger = "2.1.0"

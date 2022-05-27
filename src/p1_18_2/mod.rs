@@ -2,6 +2,7 @@ use crate::protocol::*;
 use crate::version::*;
 use crate::bytes::*;
 use crate::*;
+use crate::status::*;
 use cubic_chat::component::*;
 use cubic_chat::identifier::*;
 use uuid::Uuid;
@@ -30,7 +31,7 @@ protocol_packets! {
         Status {
             Client {
                 0x00, Response {
-                    response: String,
+                    response: ProtocolJson<StatusResponse>,
                 }
                 0x01, Pong {
                     payload: i64,

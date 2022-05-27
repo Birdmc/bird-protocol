@@ -19,7 +19,8 @@ macro_rules! protocol_enum {
         #[async_trait::async_trait]
         impl Readable for $name {
             async fn read(input: &mut impl InputByteQueue) -> Result<Self, ReadError> {
-                match <$type>::read(input).await?.into() {
+                let value = <$type>::read(input).await?;
+                match value.into() {
                     $($var_id => Ok(Self::$var_name),)*
                     _ => Err(ReadError::BadEnumValue),
                 }

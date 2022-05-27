@@ -6,6 +6,8 @@ use std::str::{from_utf8, Utf8Error};
 use cubic_chat::component::ComponentType;
 use cubic_chat::identifier::{Identifier, IdentifierError};
 use euclid::default::Vector3D;
+use serde::Serialize;
+use serde::de::DeserializeOwned;
 use serde_json::Error;
 use uuid::Uuid;
 
@@ -502,6 +504,33 @@ impl Readable for Angle {
 impl Writable for Angle {
     fn write(&self, output: &mut impl OutputByteQueue) -> Result<(), WriteError> {
         (self.0 * 256.0 / PI).write(output)
+    }
+}
+
+#[derive(Debug)]
+pub struct ProtocolJson<T: Sized> {
+    pub value: T,
+}
+
+impl<T: Serialize> Writable for ProtocolJson<T> {
+    fn write(&self, output: &mut impl OutputByteQueue) -> Result<(), WriteError> {
+        serde_json::to_string(&self.value)?.write(output)
+    }
+}
+
+#[async_trait::async_trait]
+impl<T: DeserializeOwned> Readable for ProtocolJson<T> {
+    async fn read(input: &mut impl InputByteQueue) -> Result<Self, ReadError> {
+        let vec = LengthProvidedArray::<u8, VarInt>::read(input).await?.result;
+        Ok(ProtocolJson {
+            value: serde_json::from_slice(vec.as_slice())?
+        })
+    }
+}
+
+impl<T> From<T> for ProtocolJson<T> {
+    fn from(value: T) -> Self {
+        ProtocolJson { value }
     }
 }
 
