@@ -106,10 +106,17 @@ impl<H: ProtocolServerHandler<R>, R: PacketNode + Send + Sync> ProtocolServer<H,
             };
         loop {
             match R::read(state, &mut input_queue).await {
-                Ok(packet) => server.handler.handle_event(connection.clone(), &mut state, packet),
+                Ok(packet) => {
+                    server.handler.handle_event(connection.clone(), &mut state, packet);
+                    if let Err(err) = input_queue.update().await {
+                        warn!("Failed to read bytes: {:?}", err);
+                        connection.close();
+                        break;
+                    }
+                },
                 Err(_) => {
                     connection.close();
-                    return;
+                    break;
                 }
             };
         }
