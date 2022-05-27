@@ -1,7 +1,7 @@
 use tokio::io::AsyncReadExt;
 use tokio::net::tcp::{OwnedReadHalf};
-use cubic_protocol::bytes::{InputByteQueue, InputByteQueueError, InputByteQueueResult};
-use cubic_protocol::protocol::{Readable, ReadError, VarInt};
+use crate::bytes::{InputByteQueue, InputByteQueueError, InputByteQueueResult};
+use crate::protocol::{Readable, ReadError, VarInt};
 
 pub struct ProtocolServerInputQueue<const BUFFER_SIZE: usize> {
     read: OwnedReadHalf,

@@ -3,10 +3,6 @@ macro_rules! protocol_enum {
     ($type: ty, $name: ident {
         $($var_name: ident => $var_id: expr,)*
     }) => {
-        use cubic_protocol::version::*;
-        use cubic_protocol::protocol::*;
-        use cubic_protocol::bytes::*;
-
         #[derive(PartialEq, Copy, Clone, Debug)]
         pub enum $name {
             $($var_name,)*
@@ -119,12 +115,6 @@ macro_rules! protocol_packets {
         )*}
     )*}
     ) => {
-        use cubic_protocol::version::*;
-        use cubic_protocol::protocol::*;
-        use cubic_protocol::bytes::*;
-        use cubic_chat::component::*;
-        use cubic_chat::identifier::*;
-        use uuid::Uuid;
         $(
             $(
 

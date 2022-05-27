@@ -1,4 +1,10 @@
-use cubic_protocol::*;
+use crate::protocol::*;
+use crate::version::*;
+use crate::bytes::*;
+use crate::*;
+use cubic_chat::component::*;
+use cubic_chat::identifier::*;
+use uuid::Uuid;
 
 protocol_enum! {
     VarInt, NextState {

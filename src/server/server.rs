@@ -7,10 +7,10 @@ use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::net::TcpListener;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tokio::sync::mpsc::error::SendError;
-use cubic_protocol::protocol::{Writable, WriteError};
-use cubic_protocol::tokio::BytesOutputQueue;
-use cubic_protocol::version::{PacketNode, State};
-use crate::input_queue::ProtocolServerInputQueue;
+use crate::protocol::{Writable, WriteError};
+use crate::server::input_queue::ProtocolServerInputQueue;
+use crate::tokio::BytesOutputQueue;
+use crate::version::{PacketNode, State};
 
 const BUFFER_SIZE: usize = 2048;
 
