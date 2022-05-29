@@ -1,4 +1,5 @@
 use std::fmt::{Display, Formatter};
+use std::io::Read;
 
 #[derive(Debug, Clone)]
 pub enum InputByteQueueError {

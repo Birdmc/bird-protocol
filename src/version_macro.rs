@@ -185,3 +185,116 @@ macro_rules! protocol_packets {
         $crate::bound_packet_enum!(ServerPacket, SHPacket, SSPacket, SLPacket, SPPacket);
     }
 }
+
+#[macro_export]
+macro_rules! entity_data {
+    (
+        Data {
+            $($id: expr => $type: ty,)*
+        }
+        Entities {
+            $($inherit: ty, $name: ident {
+                $($index: expr, $var_name: ident: $var_type: ty)*
+            })*
+        }
+    ) => {
+
+        #[async_trait::async_trait]
+        trait EntityDataType: Readable + Writable {
+            fn id() -> i32;
+
+            async fn read_and_validate(id: i32, input: &mut impl InputByteQueue) -> Result<Self, ReadError>;
+        }
+
+        $(
+            #[async_trait::async_trait]
+            impl EntityDataType for $type {
+
+                fn id() -> i32 {
+                    $id
+                }
+
+                async fn read_and_validate(id: i32, input: &mut impl InputByteQueue) -> Result<Self, ReadError> {
+                    match id == $id {
+                        true => <$type as Readable>::read(input).await,
+                        false => Err(ReadError::BadEntityDataType(id, $id)),
+                    }
+                }
+            }
+        )*
+
+
+        #[async_trait::async_trait]
+        trait EntityData {
+            async fn read_value(&mut self, index: u8, value_type: i32, input: &mut impl InputByteQueue) -> Result<(), ReadError>;
+
+            fn write_without_end(&self, output: &mut impl OutputByteQueue) -> Result<(), WriteError>;
+        }
+
+        #[async_trait::async_trait]
+        impl EntityData for EntityNothing {
+            async fn read_value(&mut self, index: u8, _value_type: i32, _input: &mut impl InputByteQueue) -> Result<(), ReadError> {
+                Err(ReadError::BadEntityDataIndex(index))
+            }
+
+            fn write_without_end(&self, _output: &mut impl OutputByteQueue) -> Result<(), WriteError> {
+                Ok(())
+            }
+        }
+
+        $(
+            #[derive(Debug, Default)]
+            pub struct $name {
+                inherit: $inherit,
+                $(pub $var_name: Option<$var_type>,)*
+            }
+
+            #[async_trait::async_trait]
+            impl EntityData for $name {
+                async fn read_value(&mut self, index: i32, value_type: i32, input: &mut impl InputByteQueue) -> Result<(), ReadError> {
+                    match index {
+                        $($index => {
+                            self.$var_name = <$var_type as EntityDataType>::read_and_validate(value_type, input).await?;
+                            Ok(())
+                        },)*
+                        _ => <$inherit as EntityData>::read(&mut self.inherit, index, value_type, input).await
+                    }
+                }
+
+                fn write_without_end(&self, output: &mut impl OutputByteQueue) -> Result<(), WriteError> {
+                    self.inherit.write_without_end(output)?;
+                    $(if let Some(val) = self.$var_name {
+                        ($index as u8).write(output)?;
+                        VarInt(<$var_type as EntityDataType>::id()).write(output)?;
+                        self.$var_name.write(output)?;
+                    })*
+                }
+            }
+
+            impl Writable for $name {
+                fn write(&self, output: &mut impl OutputByteQueue) -> Result<(), WriteError> {
+                    self.write_without_end(output)?;
+                    0xff_u8.write(output)
+                }
+            }
+
+            #[async_trait::async_trait]
+            impl Readable for $name {
+                async fn read(input: &mut impl InputByteQueue) -> Result<Self, ReadError> {
+                    let mut result = Self::default();
+                    loop {
+                        let index = u8::read(input).await?;
+                        if index == 0xff {
+                            break;
+                        }
+                        let value_type = VarInt::read(input).await?.0;
+                        result.read_value(index, value_type, input)?;
+                    }
+                    Ok(result)
+                }
+            }
+
+        )*
+
+    }
+}

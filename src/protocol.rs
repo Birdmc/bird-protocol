@@ -14,6 +14,7 @@ use uuid::Uuid;
 #[derive(Debug)]
 pub enum WriteError {
     JSON(serde_json::Error),
+    NBT(fastnbt::error::Error),
 }
 
 #[derive(Debug)]
@@ -60,8 +61,8 @@ impl From<InputByteQueueError> for ReadError {
 }
 
 macro_rules! delegate_type {
-    ($name: ident, $delegates: ident) => {
-        #[derive(Copy, Clone, Debug, Default, PartialEq, PartialOrd)]
+    ($name: ident, $delegates: ty) => {
+        #[derive(Copy, Clone, Debug, Default, PartialEq)]
         pub struct $name(pub $delegates);
 
         impl From<$delegates> for $name {
@@ -78,6 +79,25 @@ macro_rules! delegate_type {
     }
 }
 
+macro_rules! fully_delegate_type {
+    ($name: ident, $delegates: ty) => {
+        delegate_type!($name, $delegates);
+
+        impl Writable for $name {
+            fn write(&self, output: &mut impl OutputByteQueue) -> Result<(), WriteError> {
+                self.0.write(output)
+            }
+        }
+
+        #[async_trait::async_trait]
+        impl Readable for $name {
+            async fn read(input: &mut impl InputByteQueue) -> Result<Self, ReadError> {
+                Ok(<$delegates as Readable>::read(input).await?.into())
+            }
+        }
+    }
+}
+
 macro_rules! protocol_num_type {
     ($type: ident) => {
         impl Writable for $type {
@@ -87,7 +107,8 @@ macro_rules! protocol_num_type {
             }
         }
 
-        #[async_trait::async_trait] impl Readable for $type {
+        #[async_trait::async_trait]
+        impl Readable for $type {
             async fn read(input: &mut impl InputByteQueue) -> Result<Self, ReadError> {
                 let mut bytes = [0_u8; mem::size_of::<$type>()];
                 input.take_bytes(&mut bytes).await?;
@@ -533,6 +554,44 @@ impl<T> From<T> for ProtocolJson<T> {
         ProtocolJson { value }
     }
 }
+
+delegate_type!(Rotation, Vector3D<f32>);
+
+impl Writable for Rotation {
+    fn write(&self, output: &mut impl OutputByteQueue) -> Result<(), WriteError> {
+        self.0.x.write(output)?;
+        self.0.y.write(output)?;
+        self.0.z.write(output)
+    }
+}
+
+#[async_trait::async_trait]
+impl Readable for Rotation {
+    async fn read(input: &mut impl InputByteQueue) -> Result<Self, ReadError> {
+        Ok(Vector3D::new(
+            f32::read(input).await?,
+            f32::read(input).await?,
+            f32::read(input).await?,
+        ).into())
+    }
+}
+
+fully_delegate_type!(BlockId, VarInt);
+
+#[derive(Debug)]
+pub struct Slot {
+    pub item_id: VarInt,
+    pub item_count: u8,
+    pub nbt: fastnbt::Value,
+}
+
+// impl Writable for Slot {
+//     fn write(&self, output: &mut impl OutputByteQueue) -> Result<(), WriteError> {
+//         self.item_id.write(output)?;
+//         self.item_count.write(output)?;
+//         self.nbt.write
+//     }
+// }
 
 #[cfg(all(test, feature = "tokio-bytes"))]
 mod tests {

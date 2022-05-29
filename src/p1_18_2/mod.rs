@@ -91,3 +91,36 @@ protocol_packets! {
         }
     }
 }
+
+protocol_enum! {
+    VarInt, Direction {
+        Down => 0,
+        Up => 1,
+        North => 2,
+        South => 3,
+        West => 4,
+        East => 5,
+    }
+}
+
+entity_data! {
+    Data {
+        0 => u8,
+        1 => VarInt,
+        2 => f32,
+        3 => String,
+        4 => ComponentType,
+        5 => Option<ComponentType>,
+        // 6 => Slot,
+        7 => bool,
+        8 => Rotation,
+        9 => BlockPosition,
+        10 => Option<BlockPosition>,
+        11 => Direction,
+        12 => Option<Uuid>,
+        13 => BlockId,
+    }
+    Entities {
+
+    }
+}
