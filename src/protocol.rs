@@ -36,6 +36,12 @@ impl From<serde_json::Error> for WriteError {
     }
 }
 
+impl From<fastnbt::error::Error> for WriteError {
+    fn from(val: fastnbt::error::Error) -> Self {
+        WriteError::NBT(val)
+    }
+}
+
 impl From<Utf8Error> for ReadError {
     fn from(err: Utf8Error) -> Self {
         ReadError::BadUtf8(err)
@@ -578,6 +584,12 @@ impl Readable for Rotation {
 
 fully_delegate_type!(BlockId, VarInt);
 
+impl Writable for fastnbt::Value {
+    fn write(&self, output: &mut impl OutputByteQueue) -> Result<(), WriteError> {
+        RemainingBytesArray::new(fastnbt::to_bytes(self)?).write(output)
+    }
+}
+
 #[derive(Debug)]
 pub struct Slot {
     pub item_id: VarInt,
@@ -585,13 +597,13 @@ pub struct Slot {
     pub nbt: fastnbt::Value,
 }
 
-// impl Writable for Slot {
-//     fn write(&self, output: &mut impl OutputByteQueue) -> Result<(), WriteError> {
-//         self.item_id.write(output)?;
-//         self.item_count.write(output)?;
-//         self.nbt.write
-//     }
-// }
+impl Writable for Slot {
+    fn write(&self, output: &mut impl OutputByteQueue) -> Result<(), WriteError> {
+        self.item_id.write(output)?;
+        self.item_count.write(output)?;
+        self.nbt.write(output)
+    }
+}
 
 #[cfg(all(test, feature = "tokio-bytes"))]
 mod tests {
