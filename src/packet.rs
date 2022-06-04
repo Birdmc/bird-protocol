@@ -85,7 +85,7 @@ pub trait OutputPacketBytes: Send + Sync {
 
 #[async_trait::async_trait]
 pub trait PacketWritable {
-    async fn write(&self, output: &mut impl OutputPacketBytes) -> PacketWritableResult;
+    async fn write(self, output: &mut impl OutputPacketBytes) -> PacketWritableResult;
 }
 
 #[async_trait::async_trait]

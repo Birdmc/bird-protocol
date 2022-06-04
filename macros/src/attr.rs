@@ -3,7 +3,10 @@ use std::collections::HashMap;
 use proc_macro2::Span;
 use proc_macro_error::abort;
 use syn::{Attribute, DeriveInput};
+use syn::parse::ParseStream;
+use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
+use crate::util::{iterate_fields};
 
 pub type AttributeValue<T> = Option<(T, Span)>;
 
@@ -21,14 +24,24 @@ pub struct FieldAttributes {
     pub variant: AttributeValue<String>,
 }
 
+#[derive(Debug)]
+pub enum ProtocolClass {
+    Struct(ProtocolStruct),
+    Enum(ProtocolEnum),
+}
+
+#[derive(Debug)]
 pub struct ProtocolStruct {
     pub header: HeaderAttributes,
     pub fields: HashMap<String, FieldAttributes>,
-    pub input: DeriveInput,
+}
+
+#[derive(Debug)]
+pub struct ProtocolEnum {
+    pub types: HashMap<String, ProtocolStruct>,
 }
 
 struct PrAttribute {
-    pub name: String,
     pub values: HashMap<String, syn::Lit>,
 }
 
@@ -58,18 +71,26 @@ fn lit_to_string(from: syn::Lit) -> String {
 impl From<&Attribute> for PrAttribute {
     fn from(attribute: &Attribute) -> Self {
         let mut result = PrAttribute {
-            name: path_to_string(&attribute.path),
             values: HashMap::new(),
         };
-        let body: syn::ExprArray = attribute.parse_args()
-            .map_err(|err| abort!(err.span(), "{}", err))
-            .unwrap();
-        body.elems
-            .into_iter()
-            .map(|expr| match expr {
-                syn::Expr::Assign(assign) => assign,
-                it => abort!(it.span(), "Expected: Assign"),
+
+        let body: Punctuated<syn::ExprAssign, syn::Token![,]> =
+            attribute.parse_args_with(|input: ParseStream| {
+                let mut elems = Punctuated::new();
+                while !input.is_empty() {
+                    let first = input.parse()?;
+                    elems.push_value(first);
+                    if input.is_empty() {
+                        break;
+                    }
+                    let punct = input.parse()?;
+                    elems.push_punct(punct);
+                }
+                Ok(elems)
             })
+                .map_err(|err| abort!(err.span(), "{}", err))
+                .unwrap();
+        body.into_iter()
             .map(|expr| {
                 let key = match expr.left.borrow() {
                     syn::Expr::Path(path) => path_to_string(&path.path),
@@ -145,34 +166,40 @@ impl From<&Vec<Attribute>> for FieldAttributes {
     }
 }
 
-impl From<DeriveInput> for ProtocolStruct {
-    fn from(input: DeriveInput) -> Self {
-        let header = HeaderAttributes::from(&input.attrs);
+impl From<(&Vec<Attribute>, &syn::Fields)> for ProtocolStruct {
+    fn from(from: (&Vec<Attribute>, &syn::Fields)) -> Self {
+        let (header_attributes, struct_fields) = from;
+        let header = HeaderAttributes::from(header_attributes);
         let mut fields = HashMap::new();
-        match input.data {
-            syn::Data::Struct(ref data_struct) => match data_struct.fields {
-                syn::Fields::Named(ref struct_fields) => struct_fields.named
-                    .iter()
-                    .for_each(|field| {
-                        fields.insert(
-                            field.ident.as_ref().unwrap().to_string(), FieldAttributes::from(&field.attrs),
-                        );
-                    }),
-                syn::Fields::Unnamed(ref struct_fields) => {
-                    let mut counter = 0;
-                    struct_fields.unnamed
-                        .iter()
-                        .for_each(|field| {
-                            fields.insert(
-                                format!("{}", counter), FieldAttributes::from(&field.attrs),
-                            );
-                            counter += 1;
-                        })
-                }
-                syn::Fields::Unit => {}
+        iterate_fields(
+            &struct_fields,
+            |name, field| {
+                fields.insert(name, FieldAttributes::from(&field.attrs));
             },
-            _ => abort!(input.span(), "Only struct types supported"),
+        );
+        ProtocolStruct { header, fields }
+    }
+}
+
+impl From<&DeriveInput> for ProtocolClass {
+    fn from(input: &DeriveInput) -> Self {
+        match input.data {
+            syn::Data::Struct(ref data_struct) => ProtocolClass::Struct(
+                ProtocolStruct::from((&input.attrs, &data_struct.fields))
+            ),
+            syn::Data::Enum(ref data_enum) => {
+                let mut types = HashMap::new();
+                data_enum.variants
+                    .iter()
+                    .for_each(|variant| {
+                        types.insert(
+                            variant.ident.to_string(),
+                            ProtocolStruct::from((&variant.attrs, &variant.fields)),
+                        );
+                    });
+                ProtocolClass::Enum(ProtocolEnum { types })
+            }
+            syn::Data::Union(_) => abort!(input.span(), "Union type is not supported"),
         }
-        ProtocolStruct { fields, header, input }
     }
 }
