@@ -1,4 +1,5 @@
 use macros::{PacketWritable, Packet, PacketReadable};
+use crate::types::*;
 
 #[derive(PacketWritable, Packet, PacketReadable)]
 #[packet(id = 0x00, side = Server, state = Handshake, protocol = 0)]
