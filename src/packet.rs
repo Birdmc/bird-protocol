@@ -3,7 +3,7 @@ use quick_error::quick_error;
 quick_error! {
     #[derive(Debug)]
     pub enum CustomError {
-        Error(err: Box<dyn std::error::Error>) {
+        Error(err: Box<dyn std::error::Error + Send + Sync>) {
             display("{}", err)
             from()
             source(&**err)
@@ -59,7 +59,7 @@ quick_error! {
 }
 
 pub type InputPacketBytesResult<T> = std::result::Result<T, InputPacketBytesError>;
-pub type OutputPacketBytesResult = std::result::Result<(), Box<dyn std::error::Error>>;
+pub type OutputPacketBytesResult = std::result::Result<(), Box<dyn std::error::Error + Send + Sync>>;
 pub type PacketWritableResult = std::result::Result<(), PacketWritableError>;
 pub type PacketReadableResult<T> = std::result::Result<T, PacketReadableError>;
 

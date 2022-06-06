@@ -1,10 +1,12 @@
 mod attribute;
 mod fields;
 mod writable;
+mod readable;
 mod util;
 
 use proc_macro::TokenStream;
 use syn::{DeriveInput, parse_macro_input};
+use crate::readable::readable_macro_impl;
 use crate::writable::writable_macro_impl;
 
 #[proc_macro_error::proc_macro_error]
@@ -23,6 +25,8 @@ pub fn packet_writable(body: TokenStream) -> TokenStream {
 
 #[proc_macro_error::proc_macro_error]
 #[proc_macro_derive(PacketReadable, attributes(pf))]
-pub fn packet_readable(_body: TokenStream) -> TokenStream {
-    TokenStream::new()
+pub fn packet_readable(body: TokenStream) -> TokenStream {
+    readable_macro_impl(parse_macro_input!(body as DeriveInput))
+        .map_err(|err| proc_macro_error::abort!(err.span(), "{}", err))
+        .unwrap()
 }

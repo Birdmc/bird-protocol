@@ -52,7 +52,7 @@ impl FieldVisitor for CollectFieldVisitor {
     }
 }
 
-enum EnumFieldsType {
+pub enum FieldsType {
     Named,
     Unnamed,
     Unit,
@@ -60,7 +60,7 @@ enum EnumFieldsType {
 
 pub struct EnumFields {
     fields: Vec<Ident>,
-    fields_type: EnumFieldsType,
+    fields_type: FieldsType,
 }
 
 impl EnumFields {
@@ -74,23 +74,23 @@ impl EnumFields {
                 .map(|(ident, ..)| ident)
                 .collect(),
             fields_type: match fields {
-                Fields::Unnamed(_) => EnumFieldsType::Unnamed,
-                Fields::Named(_) => EnumFieldsType::Named,
-                Fields::Unit => EnumFieldsType::Unit,
+                Fields::Unnamed(_) => FieldsType::Unnamed,
+                Fields::Named(_) => FieldsType::Named,
+                Fields::Unit => FieldsType::Unit,
             }
         })
     }
 
     pub fn prefix(&self) -> TokenStream {
         match self.fields_type {
-            EnumFieldsType::Unnamed => quote! {__},
+            FieldsType::Unnamed => quote! {__},
             _ => quote! {},
         }
     }
 
     pub fn string_prefix(&self) -> &'static str {
         match self.fields_type {
-            EnumFieldsType::Unnamed => "__",
+            FieldsType::Unnamed => "__",
             _ => ""
         }
     }
@@ -105,9 +105,9 @@ impl EnumFields {
             ))
             .collect();
         match self.fields_type {
-            EnumFieldsType::Named => quote!{{#(#formatted_idents),*}},
-            EnumFieldsType::Unnamed => quote!{(#(#formatted_idents),*)},
-            EnumFieldsType::Unit => quote!{}
+            FieldsType::Named => quote!{{#(#formatted_idents),*}},
+            FieldsType::Unnamed => quote!{(#(#formatted_idents),*)},
+            FieldsType::Unit => quote!{}
         }
     }
 }

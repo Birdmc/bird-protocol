@@ -81,20 +81,20 @@ pub fn generate_write(object_ts: TokenStream, fields: &Fields) -> syn::Result<To
     Ok(visitor.get_result())
 }
 
-pub fn writable_macro_impl(input: DeriveInput) -> syn::Result<proc_macro::TokenStream> {
-    let func_body = match input.data {
-        Data::Struct(data_struct) => {
+pub fn build_writable_function_body(input: &DeriveInput) -> syn::Result<TokenStream> {
+    Ok(match input.data {
+        Data::Struct(ref data_struct) => {
             let mut visitor = WritableVisitor::new(quote! {self.});
             visit_fields(&data_struct.fields, &mut visitor)?;
             visitor.get_result_with_return()
         }
-        Data::Enum(data_enum) => {
+        Data::Enum(ref data_enum) => {
             let mut variants = TokenStream::new();
-            for variant in data_enum.variants {
+            for variant in &data_enum.variants {
                 let enum_fields = EnumFields::build(&variant.fields)?;
                 let mut writable_visitor = WritableVisitor::new(enum_fields.prefix());
                 visit_fields(&variant.fields, &mut writable_visitor)?;
-                let variant_ident = variant.ident;
+                let variant_ident = &variant.ident;
                 let variant_arguments = enum_fields.arguments();
                 let variant_body = writable_visitor.get_result_with_return();
                 variants = quote! {
@@ -116,7 +116,11 @@ pub fn writable_macro_impl(input: DeriveInput) -> syn::Result<proc_macro::TokenS
         Data::Union(_) => return Err(
             syn::Error::new(input.span(), "Union type is not supported")
         )
-    };
+    })
+}
+
+pub fn writable_macro_impl(input: DeriveInput) -> syn::Result<proc_macro::TokenStream> {
+    let func_body = build_writable_function_body(&input)?;
     let ident = input.ident;
     let cp_crate = get_crate();
     let generics = add_trait_bounds(
