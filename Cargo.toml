@@ -1,6 +1,6 @@
 [package]
 name = "cubic-protocol"
-version = "0.1.4"
+version = "0.1.5"
 edition = "2021"
 description = "Minecraft protocol on rust"
 license = "MIT"
@@ -17,7 +17,9 @@ cubic-chat = "0.1.0"
 serde_json = "1.0.81"
 async-trait = "0.1.53"
 fastnbt = "2.1.0"
+quick-error = "2.0.1"
 uuid = { version = "1.0.0", features = ["serde"] }
+macros = { path = "macros" }
 
 [features]
 tokio-bytes = ["dep:bytes"]
