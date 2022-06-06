@@ -1,7 +1,7 @@
-use macros::{PacketWritable, Packet, PacketReadable};
+use macros::Packet;
 use crate::types::*;
 
-#[derive(PacketWritable, Packet, PacketReadable)]
+#[derive(Packet)]
 #[packet(id = 0x00, side = Server, state = Handshake, protocol = 0)]
 pub struct Handshaking {
     #[pf(variant = VarInt)]

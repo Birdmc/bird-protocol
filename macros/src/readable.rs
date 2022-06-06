@@ -112,9 +112,9 @@ pub fn build_read_for(fields: &Fields) -> syn::Result<TokenStream> {
     })
 }
 
-pub fn readable_macro_impl(input: DeriveInput) -> syn::Result<proc_macro::TokenStream> {
+pub fn readable_macro_impl(input: &DeriveInput) -> syn::Result<proc_macro::TokenStream> {
     let func_body = match input.data {
-        Data::Struct(data_struct) => {
+        Data::Struct(ref data_struct) => {
             let read = build_read_for(&data_struct.fields)?;
             quote! {
                 Ok(Self #read)
@@ -124,10 +124,10 @@ pub fn readable_macro_impl(input: DeriveInput) -> syn::Result<proc_macro::TokenS
     };
     let cp_crate = get_crate();
     let generics = add_trait_bounds(
-        input.generics, vec![parse_quote! {#cp_crate::packet::PacketReadable}]);
+        input.generics.clone(), vec![parse_quote! {#cp_crate::packet::PacketReadable}]);
     let (impl_generics, ty_generics, where_clause) =
         generics.split_for_impl();
-    let ident = input.ident;
+    let ident = &input.ident;
     Ok(async_trait(
         quote! {
             impl #impl_generics #cp_crate::packet::PacketReadable for #ident #ty_generics #where_clause {

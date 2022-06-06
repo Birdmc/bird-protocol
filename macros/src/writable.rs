@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use proc_macro2::{Ident, TokenStream};
 use quote::quote;
 use syn::{DeriveInput, Field, Fields, Data, parse_quote};
@@ -9,7 +8,6 @@ use crate::util::{add_trait_bounds, async_trait, get_crate};
 
 pub struct WritableVisitor {
     object_ts: TokenStream,
-    spec_order: HashMap<i32, TokenStream>,
     row_order: Vec<TokenStream>,
 }
 
@@ -17,15 +15,11 @@ impl WritableVisitor {
     pub fn new(object_ts: TokenStream) -> WritableVisitor {
         WritableVisitor {
             object_ts,
-            spec_order: HashMap::new(),
             row_order: Vec::new(),
         }
     }
 
-    pub fn get_result(mut self) -> TokenStream {
-        self.spec_order
-            .into_iter()
-            .for_each(|(key, ts)| self.row_order.insert(key as usize, ts));
+    pub fn get_result(self) -> TokenStream {
         TokenStream::from_iter(self.row_order)
     }
 
@@ -58,13 +52,7 @@ impl FieldVisitor for WritableVisitor {
             }
         };
         let writable = write_ts(writable_value.0, writable_value.1);
-        match attributes.order {
-            Some((order, span)) =>
-                if let Some(_) = self.spec_order.insert(order, writable) {
-                    return Err(syn::Error::new(span, "Order repeats"));
-                },
-            None => self.row_order.push(writable),
-        }
+        self.row_order.push(writable);
         Ok(())
     }
 }
@@ -119,12 +107,11 @@ pub fn build_writable_function_body(input: &DeriveInput) -> syn::Result<TokenStr
     })
 }
 
-pub fn writable_macro_impl(input: DeriveInput) -> syn::Result<proc_macro::TokenStream> {
-    let func_body = build_writable_function_body(&input)?;
-    let ident = input.ident;
+pub fn writable_trait_from_body(input: &DeriveInput, func_body: TokenStream) -> syn::Result<proc_macro::TokenStream> {
+    let ident = &input.ident;
     let cp_crate = get_crate();
     let generics = add_trait_bounds(
-        input.generics,
+        input.generics.clone(),
         vec![parse_quote! {#cp_crate::packet::PacketWritable}],
     );
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
@@ -135,4 +122,9 @@ pub fn writable_macro_impl(input: DeriveInput) -> syn::Result<proc_macro::TokenS
             }
         }
     }))
+}
+
+pub fn writable_macro_impl(input: &DeriveInput) -> syn::Result<proc_macro::TokenStream> {
+    let func_body = build_writable_function_body(&input)?;
+    writable_trait_from_body(input, func_body)
 }

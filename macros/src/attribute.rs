@@ -17,7 +17,6 @@ pub struct PacketAttributes {
 
 #[derive(Debug, Default)]
 pub struct FieldAttributes {
-    pub order: Attribute<i32>,
     pub variant: Attribute<String>,
 }
 
@@ -120,8 +119,6 @@ impl TryFrom<Attributes> for FieldAttributes {
     fn try_from(attributes: Attributes) -> syn::Result<Self> {
         let attr = &attributes;
         Ok(FieldAttributes {
-            order: get_attribute(
-                attr, vec!["order".into()], lit_to_int)?,
             variant: get_attribute(
                 attr, vec!["variant".into(), "var".into()], lit_to_string)?,
         })
