@@ -4,6 +4,7 @@ mod writable;
 mod readable;
 mod packet;
 mod util;
+mod node;
 
 use proc_macro::TokenStream;
 use syn::{DeriveInput, parse_macro_input};
@@ -33,4 +34,10 @@ pub fn packet_readable(body: TokenStream) -> TokenStream {
     readable_macro_impl(&parse_macro_input!(body as DeriveInput))
         .map_err(|err| proc_macro_error::abort!(err.span(), "{}", err))
         .unwrap()
+}
+
+#[proc_macro]
+#[proc_macro_error::proc_macro_error]
+pub fn packet_node(_body: TokenStream) -> TokenStream {
+    TokenStream::new()
 }

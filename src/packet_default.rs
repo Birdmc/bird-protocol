@@ -11,3 +11,4 @@ pub struct Handshaking {
     #[pf(variant = VarInt)]
     pub next_state: i32,
 }
+

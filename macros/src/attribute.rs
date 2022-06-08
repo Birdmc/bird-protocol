@@ -25,7 +25,7 @@ pub struct Attributes {
     pub attributes: HashMap<String, Lit>,
 }
 
-fn path_to_string(path: &ExprPath) -> String {
+pub fn path_to_string(path: &ExprPath) -> String {
     path.path.segments
         .iter()
         .map(|element| element.ident.to_string())
@@ -33,14 +33,14 @@ fn path_to_string(path: &ExprPath) -> String {
         .join("::")
 }
 
-fn lit_to_int(lit: &Lit) -> syn::Result<i32> {
+pub fn lit_to_int(lit: &Lit) -> syn::Result<i32> {
     match lit {
         Lit::Int(int) => int.base10_parse(),
         it => Err(syn::Error::new(it.span(), "Expected i32")),
     }
 }
 
-fn lit_to_string(lit: &Lit) -> syn::Result<String> {
+pub fn lit_to_string(lit: &Lit) -> syn::Result<String> {
     match lit {
         Lit::Str(str) => Ok({
             let str = str.token().to_string();
@@ -50,7 +50,7 @@ fn lit_to_string(lit: &Lit) -> syn::Result<String> {
     }
 }
 
-fn get_attribute<T>(attributes: &Attributes,
+pub fn get_attribute<T>(attributes: &Attributes,
                     names: Vec<String>,
                     mut parse: impl FnMut(&Lit) -> syn::Result<T>) -> syn::Result<Attribute<T>> {
     for name in names {
