@@ -19,12 +19,14 @@ async-trait = "0.1.53"
 fastnbt = "2.1.0"
 quick-error = "2.0.1"
 uuid = { version = "1.0.0", features = ["serde"] }
-macros = { path = "macros" }
+cp_derive = { path = "cp_derive", optional = true }
 
 [features]
 tokio-bytes = ["dep:bytes"]
 p1_18_2 = []
 server = ["dep:tokio", "tokio-bytes", "dep:log"]
+derive = ["cp_derive"]
+default_packets = ["derive"]
 
 [dev-dependencies]
 actix-rt = "2.7.0"
