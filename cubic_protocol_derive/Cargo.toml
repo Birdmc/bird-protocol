@@ -2,6 +2,8 @@
 name = "cubic-protocol-derive"
 version = "0.1.6"
 edition = "2021"
+description = "Packet, PacketReadable, PacketWritable derives for CubicProtocol"
+license = "MIT"
 
 [lib]
 proc-macro = true
