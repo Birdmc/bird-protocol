@@ -1,4 +1,5 @@
 use macros::Packet;
+use crate::packet_node;
 use crate::types::*;
 
 #[derive(Packet)]
@@ -11,3 +12,7 @@ pub struct Handshaking {
     #[pf(variant = VarInt)]
     pub next_state: i32,
 }
+
+packet_node!(
+    DefaultHandshake => [Handshaking]
+);
