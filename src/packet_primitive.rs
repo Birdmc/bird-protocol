@@ -4,7 +4,7 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use uuid::Uuid;
 use crate::packet::{CustomError, InputPacketBytes, OutputPacketBytes, PacketReadable, PacketReadableResult, PacketWritable, PacketWritableResult};
-use crate::types::{Angle, BlockPosition, ProtocolJson, VarInt, VarLong};
+use crate::types::{Angle, BlockPosition, LengthProvidedArray, ProtocolJson, RemainingBytesArray, VarInt, VarLong};
 
 #[async_trait::async_trait]
 impl PacketReadable for u8 {
@@ -217,8 +217,98 @@ impl PacketWritable for Uuid {
     }
 }
 
+#[async_trait::async_trait]
+impl<T: PacketReadable> PacketReadable for Option<T> {
+    async fn read(input: &mut impl InputPacketBytes) -> PacketReadableResult<Self> {
+        let present = bool::read(input).await?;
+        match present {
+            true => Ok(Some(T::read(input).await?)),
+            false => Ok(None),
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl<T: PacketWritable + Send + Sync> PacketWritable for Option<T> {
+    async fn write(self, output: &mut impl OutputPacketBytes) -> PacketWritableResult {
+        match self {
+            Some(val) => {
+                true.write(output).await?;
+                val.write(output).await
+            }
+            None => false.write(output).await
+        }
+    }
+}
+
+pub async fn read_vec<T: PacketReadable>(
+    length: usize, input: &mut impl InputPacketBytes) -> PacketReadableResult<Vec<T>> {
+    let mut result = Vec::with_capacity(length);
+    for _ in 0..length {
+        result.push(T::read(input).await?);
+    }
+    Ok(result)
+}
+
+pub async fn write_vec<T: PacketWritable>(
+    vec: Vec<T>, output: &mut impl OutputPacketBytes) -> PacketWritableResult {
+    for value in vec {
+        value.write(output).await?
+    }
+    Ok(())
+}
+
+#[async_trait::async_trait]
+impl<T: PacketReadable + Send + Sync> PacketReadable for RemainingBytesArray<T> {
+    async fn read(input: &mut impl InputPacketBytes) -> PacketReadableResult<Self> {
+        let length = input.remaining_bytes();
+        Ok(RemainingBytesArray::new(read_vec(length, input).await?))
+    }
+}
+
+#[async_trait::async_trait]
+impl<T: PacketWritable + Send + Sync> PacketWritable for RemainingBytesArray<T> {
+    async fn write(self, output: &mut impl OutputPacketBytes) -> PacketWritableResult {
+        write_vec(self.value, output).await?;
+        Ok(())
+    }
+}
+
+pub trait USizePossible {
+    fn into_usize(self) -> usize;
+
+    fn from_usize(value: usize) -> Self;
+}
+
+#[async_trait::async_trait]
+impl<T: PacketReadable + Send + Sync, S: PacketReadable + USizePossible> PacketReadable for LengthProvidedArray<T, S> {
+    async fn read(input: &mut impl InputPacketBytes) -> PacketReadableResult<Self> {
+        let length = S::read(input).await?.into_usize();
+        Ok(LengthProvidedArray::new(read_vec(length, input).await?))
+    }
+}
+
+#[async_trait::async_trait]
+impl<T: PacketWritable + Send + Sync,
+    S: PacketWritable + USizePossible + Send + Sync> PacketWritable for LengthProvidedArray<T, S> {
+    async fn write(self, output: &mut impl OutputPacketBytes) -> PacketWritableResult {
+        S::from_usize(self.value.len()).write(output).await?;
+        write_vec(self.value, output).await
+    }
+}
+
 macro_rules! num {
     ($type: ty) => {
+        impl USizePossible for $type {
+            fn into_usize(self) -> usize {
+                self as usize
+            }
+
+            fn from_usize(value: usize) -> Self {
+                value as Self
+            }
+        }
+
         #[async_trait::async_trait]
         impl PacketReadable for $type {
             async fn read(input: &mut impl InputPacketBytes) -> PacketReadableResult<Self> {
@@ -243,6 +333,16 @@ macro_rules! num {
 
 macro_rules! var_num {
     ($var_num_type: ty, $num_type: ty, $unsigned_num_type: ty) => {
+        impl USizePossible for $var_num_type {
+            fn into_usize(self) -> usize {
+                <$num_type>::from(self) as usize
+            }
+
+            fn from_usize(value: usize) -> Self {
+                <$var_num_type>::from(value as $num_type)
+            }
+        }
+
         #[async_trait::async_trait]
         impl PacketReadable for $var_num_type {
             async fn read(input: &mut impl InputPacketBytes) -> PacketReadableResult<Self> {

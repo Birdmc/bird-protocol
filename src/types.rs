@@ -13,31 +13,89 @@ pub struct ProtocolNbt<T> {
 }
 
 pub struct RemainingBytesArray<T> {
-    pub result: Vec<T>,
+    pub value: Vec<T>,
+}
+
+impl<T> RemainingBytesArray<T> {
+    pub fn new(value: Vec<T>) -> Self {
+        Self { value }
+    }
+
+    pub fn get(&self) -> &Vec<T> {
+        &self.value
+    }
+}
+
+impl<T> From<Vec<T>> for RemainingBytesArray<T> {
+    fn from(value: Vec<T>) -> Self {
+        RemainingBytesArray::new(value)
+    }
+}
+
+impl<T> From<RemainingBytesArray<T>> for Vec<T> {
+    fn from(array: RemainingBytesArray<T>) -> Self {
+        array.value
+    }
 }
 
 pub struct LengthProvidedArray<T, S> {
-    pub result: Vec<T>,
+    pub value: Vec<T>,
     size: PhantomData<S>,
 }
 
+impl<T, S> LengthProvidedArray<T, S> {
+    pub fn new(value: Vec<T>) -> Self {
+        Self { value, size: PhantomData }
+    }
+
+    pub fn get(&self) -> &Vec<T> {
+        &self.value
+    }
+}
+
+impl<T, S> From<Vec<T>> for LengthProvidedArray<T, S> {
+    fn from(value: Vec<T>) -> Self {
+        LengthProvidedArray::new(value)
+    }
+}
+
+impl<T, S> From<LengthProvidedArray<T, S>> for Vec<T> {
+    fn from(array: LengthProvidedArray<T, S>) -> Self {
+        array.value
+    }
+}
+
 impl<T> ProtocolJson<T> {
-    pub fn new(value: T) -> ProtocolJson<T> {
-        ProtocolJson { value }
+    pub fn new(value: T) -> Self {
+        Self { value }
     }
 
     pub fn get(&self) -> &T {
         &self.value
+    }
+
+    pub fn into(self) -> T {
+        self.value
+    }
+}
+
+impl<T> From<T> for ProtocolJson<T> {
+    fn from(val: T) -> Self {
+        ProtocolJson::new(val)
     }
 }
 
 impl<T> ProtocolNbt<T> {
-    pub fn new(value: T) -> ProtocolNbt<T> {
-        ProtocolNbt { value }
+    pub fn new(value: T) -> Self {
+        Self { value }
     }
 
     pub fn get(&self) -> &T {
         &self.value
+    }
+
+    pub fn int(self) -> T {
+        self.value
     }
 }
 

@@ -40,7 +40,7 @@ impl FieldVisitor for WritableVisitor {
                 let variant_ident = Ident::new(variant.as_str(), span);
                 (
                     quote! {#variant_ident},
-                    quote! {#variant_ident::from(#object_ts #name)},
+                    quote! {#variant_ident::from(#object_ts #name)}
                 )
             }
             None => {

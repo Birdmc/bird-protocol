@@ -1,7 +1,6 @@
-use std::borrow::Borrow;
 use std::collections::HashMap;
 use proc_macro2::Span;
-use syn::{ExprAssign, Lit, Expr, ExprPath, LitStr, Token};
+use syn::{Lit, Expr, ExprPath, LitStr, Token};
 use syn::parse::{Parse, ParseStream};
 use syn::spanned::Spanned;
 
@@ -22,7 +21,7 @@ pub struct FieldAttributes {
 
 #[derive(Default)]
 pub struct Attributes {
-    pub attributes: HashMap<String, Lit>,
+    pub attributes: HashMap<String, Expr>,
 }
 
 pub fn path_to_string(path: &ExprPath) -> String {
@@ -33,15 +32,25 @@ pub fn path_to_string(path: &ExprPath) -> String {
         .join("::")
 }
 
-pub fn lit_to_int(lit: &Lit) -> syn::Result<i32> {
-    match lit {
+pub fn expr_to_lit(expr: &Expr) -> syn::Result<Lit> {
+    match expr {
+        Expr::Lit(ref lit) => Ok(lit.lit.clone()),
+        Expr::Path(ref path) => Ok(Lit::Str(LitStr::new(
+            path_to_string(path).as_str(), path.span()
+        ))),
+        it => Err(syn::Error::new(it.span(), "Expected literal"))
+    }
+}
+
+pub fn expr_to_int(expr: &Expr) -> syn::Result<i32> {
+    match expr_to_lit(expr)? {
         Lit::Int(int) => int.base10_parse(),
         it => Err(syn::Error::new(it.span(), "Expected i32")),
     }
 }
 
-pub fn lit_to_string(lit: &Lit) -> syn::Result<String> {
-    match lit {
+pub fn expr_to_string(expr: &Expr) -> syn::Result<String> {
+    match expr_to_lit(expr)? {
         Lit::Str(str) => Ok({
             let str = str.token().to_string();
             str[1..str.len() - 1].to_string()
@@ -51,12 +60,12 @@ pub fn lit_to_string(lit: &Lit) -> syn::Result<String> {
 }
 
 pub fn get_attribute<T>(attributes: &Attributes,
-                    names: Vec<String>,
-                    mut parse: impl FnMut(&Lit) -> syn::Result<T>) -> syn::Result<Attribute<T>> {
+                        names: Vec<String>,
+                        mut parse: impl FnMut(&Expr) -> syn::Result<T>) -> syn::Result<Attribute<T>> {
     for name in names {
         match attributes.attributes.get(&name) {
-            Some(lit) => return Ok(Some(
-                (parse(lit)?, lit.span())
+            Some(expr) => return Ok(Some(
+                (parse(expr)?, expr.span())
             )),
             None => continue,
         }
@@ -68,22 +77,14 @@ impl Parse for Attributes {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let mut result = Attributes::default();
         while !input.is_empty() {
-            let elem: ExprAssign = input.parse()?;
-            let key = match elem.left.borrow() {
-                Expr::Path(path) => path_to_string(path),
-                it => return Err(syn::Error::new(it.span(), "Expected path")),
-            };
-            let value = match elem.right.borrow() {
-                Expr::Path(path) => Lit::Str(
-                    LitStr::new(path_to_string(path).as_str(), path.span())),
-                Expr::Lit(lit) => lit.lit.clone(),
-                it => return Err(syn::Error::new(it.span(), "Expected path or lit")),
-            };
+            let key = path_to_string(&input.parse::<ExprPath>()?);
+            input.parse::<Token![=]>()?;
+            let value: Expr = input.parse()?;
             result.attributes.insert(key, value);
             if input.is_empty() {
                 break;
             }
-            let _punct = input.parse::<Token![,]>()?;
+            input.parse::<Token![,]>()?;
         }
         Ok(result)
     }
@@ -96,13 +97,13 @@ impl TryFrom<Attributes> for PacketAttributes {
         let attr = &attributes;
         Ok(PacketAttributes {
             id: get_attribute(
-                attr, vec!["id".into()], lit_to_int)?,
+                attr, vec!["id".into()], expr_to_int)?,
             state: get_attribute(
-                attr, vec!["state".into()], lit_to_string)?,
+                attr, vec!["state".into()], expr_to_string)?,
             side: get_attribute(
-                attr, vec!["side".into()], lit_to_string)?,
+                attr, vec!["side".into()], expr_to_string)?,
             protocol: get_attribute(
-                attr, vec!["protocol".into()], lit_to_int)?,
+                attr, vec!["protocol".into()], expr_to_int)?,
         })
     }
 }
@@ -120,7 +121,7 @@ impl TryFrom<Attributes> for FieldAttributes {
         let attr = &attributes;
         Ok(FieldAttributes {
             variant: get_attribute(
-                attr, vec!["variant".into(), "var".into()], lit_to_string)?,
+                attr, vec!["variant".into(), "var".into()], expr_to_string)?,
         })
     }
 }

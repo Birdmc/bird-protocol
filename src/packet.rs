@@ -71,9 +71,9 @@ pub trait InputPacketBytes: Send + Sync {
 
     async fn take_vec(&mut self, vec: &mut Vec<u8>) -> InputPacketBytesResult<()>;
 
-    fn has_bytes(count: usize) -> bool;
+    fn has_bytes(&self, count: usize) -> bool;
 
-    fn remaining_bytes() -> usize;
+    fn remaining_bytes(&self) -> usize;
 }
 
 #[async_trait::async_trait]
