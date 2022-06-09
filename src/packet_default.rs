@@ -1,4 +1,5 @@
 use macros::Packet;
+use crate::packet_node;
 use crate::types::*;
 
 #[derive(Packet)]
@@ -12,3 +13,6 @@ pub struct Handshaking {
     pub next_state: i32,
 }
 
+packet_node!(
+    DefaultHandshake => [Handshaking]
+);

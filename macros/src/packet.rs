@@ -53,22 +53,25 @@ pub fn packet_macro_impl(input: &DeriveInput) -> syn::Result<proc_macro::TokenSt
     let ident = &input.ident;
 
     // As because rust is not supporting const traits (Expiremental)
-    // So we need to create const functions to speed up the program
+    // So we create const variables to use ids in patterns and const functions
     let const_packet = proc_macro::TokenStream::from(quote! {
         impl #impl_generics #ident #ty_generics #where_clause {
-            const fn id() -> i32 {
-                #id
+            pub const ID: i32 = #id;
+            pub const PROTOCOL: i32 = #protocol;
+
+            pub const fn id() -> i32 {
+                Self::ID
             }
 
-            const fn protocol() -> i32 {
-                #protocol
+            pub const fn protocol() -> i32 {
+                Self::PROTOCOL
             }
 
-            const fn side() -> #cp_crate::packet::PacketSide {
+            pub const fn side() -> #cp_crate::packet::PacketSide {
                 #cp_crate::packet::PacketSide::#side
             }
 
-            const fn state() -> #cp_crate::packet::PacketState {
+            pub const fn state() -> #cp_crate::packet::PacketState {
                 #cp_crate::packet::PacketState::#state
             }
         }
@@ -77,19 +80,19 @@ pub fn packet_macro_impl(input: &DeriveInput) -> syn::Result<proc_macro::TokenSt
     let packet_trait = proc_macro::TokenStream::from(quote! {
         impl #impl_generics #cp_crate::packet::Packet for #ident #ty_generics #where_clause {
             fn id() -> i32 {
-                #ident::id()
+                Self::id()
             }
 
             fn side() -> #cp_crate::packet::PacketSide {
-                #cp_crate::packet::PacketSide::#side
+                Self::side()
             }
 
             fn state() -> #cp_crate::packet::PacketState {
-                #cp_crate::packet::PacketState::#state
+                Self::state()
             }
 
             fn protocol() -> i32 {
-                #ident::protocol()
+                Self::protocol()
             }
         }
     });
