@@ -1,5 +1,5 @@
 [package]
-name = "cp_derive"
+name = "cubic-protocol-derive"
 version = "0.1.6"
 edition = "2021"
 
