@@ -20,8 +20,10 @@ fastnbt = "2.1.0"
 quick-error = "2.0.1"
 uuid = { version = "1.0.0", features = ["serde"] }
 cubic-protocol-derive = { path = "./cubic_protocol_derive", version = "0.1.6", optional = true }
+cubic-protocol-server = { path = "./cubic_protocol_server", version = "0.1.6", optional = true }
 
 [features]
+protocol_server = ["dep:cubic-protocol-server"]
 derive = ["dep:cubic-protocol-derive"]
 default_packets = ["derive"]
 
