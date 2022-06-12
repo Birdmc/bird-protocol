@@ -9,7 +9,6 @@ use crate::handler::{ConnectionHandler, ReadHandler};
 use crate::read::ReadStreamQueue;
 use crate::write::WriteStreamQueue;
 
-
 pub struct ProtocolServerDeclare<
     H: ReadHandler + Sized + Send + Sync + 'static,
     C: ConnectionHandler + Sized + Send + Sync + 'static,
@@ -58,19 +57,21 @@ async fn run_server_runtime<
     while runtime.running.load(Ordering::Acquire) {
         let (stream, addr) = listener.accept().await?;
         let declare = declare.clone();
-        tokio::spawn(async move { connection_run(declare, stream, addr).await });
+        let runtime = runtime.clone();
+        tokio::spawn(async move { run_connection(declare, runtime, stream, addr).await });
     }
     Ok(())
 }
 
-async fn connection_run<
+async fn run_connection<
     H: ReadHandler + Sized + Send + Sync + 'static,
     C: ConnectionHandler + Sized + Send + Sync + 'static
->(declare: Arc<ProtocolServerDeclare<H, C>>, stream: TcpStream, addr: SocketAddr) {
+>(declare: Arc<ProtocolServerDeclare<H, C>>, runtime: Arc<ProtocolServerRuntime>, stream: TcpStream, addr: SocketAddr) {
     let (read_half, write_half) = stream.into_split();
     let (sender, receiver) =
         sync::mpsc::channel(CHANNEL_BUFFER_SIZE);
     let connection = Arc::new(Connection::new(addr, sender));
+    declare.connection_handler.handle_connection(connection.clone());
     let mut read_queue = ReadStreamQueue::<READ_BUFFER_SIZE>::new(read_half);
     {
         let write_queue = WriteStreamQueue { write_half, receiver };
@@ -79,15 +80,14 @@ async fn connection_run<
         tokio::spawn(async move { write_queue.run(connection, declare).await });
     }
     let mut state = PacketState::Handshake;
-    loop {
+    while runtime.running.load(Ordering::Acquire) {
         if let Err(_) = read_queue.next_packet().await {
-            let _ = connection.close().await;
             break;
         }
         if let Err(_) = declare.read_handler.handle(
             connection.clone(), &mut state, &mut read_queue).await {
-            let _ = connection.close().await;
             break;
         }
     }
+    let _ = connection.close().await;
 }
