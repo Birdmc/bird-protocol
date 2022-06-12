@@ -68,6 +68,7 @@ impl<
     LH: PacketHandler<L>, PH: PacketHandler<P>,
 > ReadHandler for ContainerReadHandler<H, S, L, P, HH, SH, LH, PH> {
     async fn handle(&self, connection: Arc<Connection>, state: &mut PacketState, input: &mut impl InputPacketBytes) -> PacketReadableResult<()> {
+        log::debug!("Received packet for state: {:?}", state);
         Ok(match state {
             PacketState::Handshake =>
                 self.handshake.handle_packet(connection, state, H::read(input).await?),

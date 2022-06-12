@@ -1,8 +1,9 @@
 #[macro_export]
 macro_rules! packet_node {
-    ($node_ident: ident => [
+    ($(#[$meta:meta])* $node_ident: ident => [
         $($packet_ident:ident$(<$($packet_generic:ty$(,)*)*>)*$(,)*)*
     ]) => {
+        $(#[$meta])*
         pub enum $node_ident {
             $($packet_ident($packet_ident<$($($packet_generic,)*)*>),)*
         }

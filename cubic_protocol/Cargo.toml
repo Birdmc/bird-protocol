@@ -19,6 +19,7 @@ cubic-protocol-derive = { path = "../cubic_protocol_derive", version = "0.1.6", 
 [features]
 derive = ["dep:cubic-protocol-derive"]
 default_packets = ["derive"]
+all = ["default_packets", "derive"]
 
 [dev-dependencies]
 actix-rt = "2.7.0"
