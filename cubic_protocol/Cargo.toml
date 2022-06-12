@@ -1,0 +1,26 @@
+[package]
+name = "cubic-protocol"
+version = "0.1.6"
+edition = "2021"
+description = "Minecraft protocol on rust"
+license = "MIT"
+
+[dependencies]
+serde = { version = "1.0.137", features = ["derive"] }
+euclid = "0.22.7"
+cubic-chat = "0.1.0"
+serde_json = "1.0.81"
+async-trait = "0.1.53"
+fastnbt = "2.1.0"
+quick-error = "2.0.1"
+uuid = { version = "1.0.0", features = ["serde"] }
+cubic-protocol-derive = { path = "../cubic_protocol_derive", version = "0.1.6", optional = true }
+
+[features]
+derive = ["dep:cubic-protocol-derive"]
+default_packets = ["derive"]
+all = ["default_packets", "derive"]
+
+[dev-dependencies]
+actix-rt = "2.7.0"
+simple_logger = "2.1.0"

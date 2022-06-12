@@ -69,7 +69,7 @@ pub trait InputPacketBytes: Send + Sync {
 
     async fn take_slice(&mut self, slice: &mut [u8]) -> InputPacketBytesResult<()>;
 
-    async fn take_vec(&mut self, vec: &mut Vec<u8>) -> InputPacketBytesResult<()>;
+    async fn take_vec(&mut self, vec: &mut Vec<u8>, count: usize) -> InputPacketBytesResult<()>;
 
     fn has_bytes(&self, count: usize) -> bool;
 
