@@ -4,3 +4,5 @@ pub mod types;
 #[cfg(feature = "default_packets")]
 pub mod packet_default;
 pub mod packet_node;
+#[cfg(test)]
+pub mod tests;
