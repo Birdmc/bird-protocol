@@ -1,8 +1,9 @@
 use std::net::SocketAddr;
 use tokio::sync::mpsc::Sender;
 use cubic_protocol::packet::{CustomError, PacketWritable, PacketWritableResult};
+use cubic_protocol::packet_bytes::OutputPacketBytesVec;
 use cubic_protocol::types::VarInt;
-use crate::write::{WriteBytes, WriteMessage};
+use crate::write::{WriteMessage};
 
 pub struct Connection {
     addr: SocketAddr,
@@ -33,9 +34,9 @@ impl Connection {
     }
 
     pub async fn write_bytes(&self, mut bytes: Vec<u8>) -> PacketWritableResult {
-        let mut length_bytes = WriteBytes::default();
+        let mut length_bytes = OutputPacketBytesVec::new();
         VarInt::from(bytes.len() as i32).write(&mut length_bytes).await?;
-        length_bytes.bytes.into_iter()
+        length_bytes.data.into_iter()
             .rev()
             .for_each(|byte| bytes.insert(0, byte));
         self.write_raw_bytes(bytes).await?;
@@ -43,8 +44,8 @@ impl Connection {
     }
 
     pub async fn write_object<T: PacketWritable>(&self, object: T) -> PacketWritableResult {
-        let mut length_bytes = WriteBytes::default();
+        let mut length_bytes = OutputPacketBytesVec::new();
         object.write(&mut length_bytes).await?;
-        self.write_bytes(length_bytes.bytes).await
+        self.write_bytes(length_bytes.into()).await
     }
 }
