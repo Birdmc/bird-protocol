@@ -128,9 +128,9 @@ impl<const BUFFER_SIZE: usize> InputPacketBytes for ReadStreamQueue<BUFFER_SIZE>
     }
 
     fn remaining_bytes(&self) -> usize {
-        match self.packet_length >= self.packet_offset {
-            true => 0,
-            false => self.packet_length - self.packet_offset + 1,
+        match self.packet_offset > self.packet_offset {
+            true => self.packet_length - self.packet_offset,
+            false => 0
         }
     }
 }

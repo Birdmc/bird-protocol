@@ -23,4 +23,3 @@ all = ["default_packets", "derive"]
 
 [dev-dependencies]
 actix-rt = "2.7.0"
-simple_logger = "2.1.0"

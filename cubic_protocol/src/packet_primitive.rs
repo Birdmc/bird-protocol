@@ -75,7 +75,8 @@ async fn read_string_with_limit(input: &mut impl InputPacketBytes, limit: i32) -
         true => Err(CustomError::StaticStr("String is too big").into()),
         false => {
             let mut bytes = Vec::with_capacity(length as usize);
-            input.take_vec(&mut bytes, length as usize).await?;
+            unsafe { bytes.set_len(length as usize); }
+            input.take_slice(&mut bytes).await?;
             Ok(std::str::from_utf8(bytes.as_slice())
                 .map_err(|err| CustomError::Error(Box::new(err)))?
                 .into()
@@ -88,8 +89,11 @@ async fn write_string_with_limit(output: &mut impl OutputPacketBytes, str: &str,
     let str_len = str.len() as i32;
     match str_len > limit {
         true => Err(CustomError::StaticStr("String is too big").into()),
-        false => output.write_bytes(str.as_bytes()).await
-            .map_err(|err| CustomError::Error(err).into())
+        false => {
+            VarInt(str_len).write(output).await?;
+            output.write_bytes(str.as_bytes()).await
+                .map_err(|err| CustomError::Error(err).into())
+        }
     }
 }
 
