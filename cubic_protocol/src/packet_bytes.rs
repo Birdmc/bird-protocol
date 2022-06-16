@@ -101,9 +101,9 @@ impl InputPacketBytes for InputPacketBytesPrepared {
     }
 
     fn remaining_bytes(&self) -> usize {
-        match self.data.len() <= self.offset {
-            true => 0,
-            false => self.data.len() - self.offset + 1,
+        match self.data.len() > self.offset {
+            true => self.data.len() - self.offset,
+            false => 0,
         }
     }
 }

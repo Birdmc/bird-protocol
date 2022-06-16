@@ -55,4 +55,27 @@ mod primitives {
             assert_eq!(VarLong::read(&mut input).await.unwrap().0, -9223372036854775808);
         }
     }
+
+    #[actix_rt::test]
+    async fn string_test() {
+        {
+            let mut output = OutputPacketBytesVec::new();
+            "jenya705".write(&mut output).await.unwrap();
+            "рашн ленг".write(&mut output).await.unwrap();
+            let mut input = InputPacketBytesPrepared::from(output);
+            assert_eq!(String::read(&mut input).await.unwrap(), "jenya705");
+            assert_eq!(String::read(&mut input).await.unwrap(), "рашн ленг");
+        }
+    }
+
+    #[actix_rt::test]
+    async fn block_position_test() {
+        {
+            let position = BlockPosition::new(32, -32, -32195);
+            let mut output = OutputPacketBytesVec::new();
+            position.write(&mut output).await.unwrap();
+            let mut input = InputPacketBytesPrepared::from(output);
+            assert_eq!(BlockPosition::read(&mut input).await.unwrap(), position);
+        }
+    }
 }
