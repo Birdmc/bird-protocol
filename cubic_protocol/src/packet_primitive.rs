@@ -318,14 +318,14 @@ macro_rules! num {
             async fn read(input: &mut impl InputPacketBytes) -> PacketReadableResult<Self> {
                 let mut bytes = [0_u8; std::mem::size_of::<Self>()];
                 input.take_slice(&mut bytes).await?;
-                Ok(Self::from_le_bytes(bytes))
+                Ok(Self::from_be_bytes(bytes))
             }
         }
 
         #[async_trait::async_trait]
         impl PacketWritable for $type {
             async fn write(self, output: &mut impl OutputPacketBytes) -> PacketWritableResult {
-                output.write_bytes(&self.to_le_bytes()).await
+                output.write_bytes(&self.to_be_bytes()).await
                     .map_err(|err| CustomError::Error(err).into())
             }
         }

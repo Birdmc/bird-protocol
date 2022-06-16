@@ -81,11 +81,13 @@ async fn run_connection<
     }
     let mut state = PacketState::Handshake;
     while runtime.running.load(Ordering::Acquire) {
-        if let Err(_) = read_queue.next_packet().await {
+        if let Err(err) = read_queue.next_packet().await {
+            log::debug!("Received error while getting next packet: {:?}", err);
             break;
         }
-        if let Err(_) = declare.read_handler.handle(
+        if let Err(err) = declare.read_handler.handle(
             connection.clone(), &mut state, &mut read_queue).await {
+            log::debug!("Received error while handling next packet: {:?}", err);
             break;
         }
     }

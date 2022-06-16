@@ -9,7 +9,7 @@ use crate::types::*;
 type RemainingBytesArrayU8 = RemainingBytesArray<u8>;
 type LengthProvidedArrayU8VarInt = LengthProvidedArray<u8, VarInt>;
 
-#[derive(Packet, Debug)]
+#[derive(Packet, Debug, PartialEq)]
 #[packet(id = 0x00, side = Client, state = Handshake, protocol = 0)]
 pub struct Handshaking {
     #[pf(variant = VarInt)]
@@ -20,19 +20,19 @@ pub struct Handshaking {
     pub next_state: i32,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct StatusResponseVersion {
     pub name: String,
     pub protocol: i32,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct StatusResponseSample {
     pub name: String,
     pub uuid: Uuid,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct StatusResponsePlayers {
     pub max: i32,
     pub online: i32,
@@ -40,7 +40,7 @@ pub struct StatusResponsePlayers {
     pub sample: Vec<StatusResponseSample>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 #[serde(untagged)]
 pub enum StatusResponseDescription {
     Component(ComponentType),
@@ -53,7 +53,7 @@ impl Default for StatusResponseDescription {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct StatusResponseObject {
     pub version: StatusResponseVersion,
     pub players: StatusResponsePlayers,
@@ -65,36 +65,36 @@ pub struct StatusResponseObject {
 
 type StatusResponseObjectJson = ProtocolJson<StatusResponseObject>;
 
-#[derive(Packet, Debug)]
+#[derive(Packet, Debug, PartialEq)]
 #[packet(id = 0x00, side = Server, state = Status, protocol = 0)]
 pub struct StatusResponse {
     #[pf(variant = StatusResponseObjectJson)]
     pub response: StatusResponseObject,
 }
 
-#[derive(Packet, Debug)]
+#[derive(Packet, Debug, PartialEq)]
 #[packet(id = 0x01, side = Server, state = Status, protocol = 0)]
 pub struct StatusPong {
     pub payload: i64,
 }
 
-#[derive(Packet, Debug)]
+#[derive(Packet, Debug, PartialEq)]
 #[packet(id = 0x00, side = Client, state = Status, protocol = 0)]
 pub struct StatusRequest;
 
-#[derive(Packet, Debug)]
+#[derive(Packet, Debug, PartialEq)]
 #[packet(id = 0x01, side = Client, state = Status, protocol = 0)]
 pub struct StatusPing {
     pub payload: i64,
 }
 
-#[derive(Packet, Debug)]
+#[derive(Packet, Debug, PartialEq)]
 #[packet(id = 0x00, side = Server, state = Login, protocol = 0)]
 pub struct LoginDisconnect {
     pub reason: ComponentType
 }
 
-#[derive(PacketWritable, PacketReadable, Debug)]
+#[derive(PacketWritable, PacketReadable, Debug, PartialEq)]
 pub struct SignatureData {
     #[pf(variant = LengthProvidedArrayU8VarInt)]
     pub public_key: Vec<u8>,
@@ -102,28 +102,28 @@ pub struct SignatureData {
     pub signature: Vec<u8>,
 }
 
-#[derive(Packet, Debug)]
+#[derive(Packet, Debug, PartialEq)]
 #[packet(id = 0x01, side = Server, state = Login, protocol = 0)]
 pub struct LoginEncryptionRequest {
     pub server_id: String,
     pub signature_data: SignatureData,
 }
 
-#[derive(Packet, Debug)]
+#[derive(Packet, Debug, PartialEq)]
 #[packet(id = 0x02, side = Server, state = Login, protocol = 0)]
 pub struct LoginSuccess {
     pub uuid: Uuid,
     pub username: String,
 }
 
-#[derive(Packet, Debug)]
+#[derive(Packet, Debug, PartialEq)]
 #[packet(id = 0x03, side = Server, state = Login, protocol = 0)]
 pub struct LoginSetCompression {
     #[pf(variant = VarInt)]
     pub threshold: i32,
 }
 
-#[derive(Packet, Debug)]
+#[derive(Packet, Debug, PartialEq)]
 #[packet(id = 0x04, side = Server, state = Login, protocol = 0)]
 pub struct LoginPluginRequest {
     #[pf(variant = VarInt)]
@@ -133,20 +133,20 @@ pub struct LoginPluginRequest {
     pub data: Vec<u8>,
 }
 
-#[derive(Packet, Debug)]
+#[derive(Packet, Debug, PartialEq)]
 #[packet(id = 0x00, side = Client, state = Login, protocol = 0)]
 pub struct LoginStart {
     pub name: String,
     pub signature_data: Option<SignatureData>,
 }
 
-#[derive(Packet, Debug)]
+#[derive(Packet, Debug, PartialEq)]
 #[packet(id = 0x01, side = Client, state = Login, protocol = 0)]
 pub struct LoginEncryptionResponse {
     pub signature_data: SignatureData,
 }
 
-#[derive(Packet, Debug)]
+#[derive(Packet, Debug, PartialEq)]
 #[packet(id = 0x02, side = Client, state = Login, protocol = 0)]
 pub struct LoginPluginSuccess {
     #[pf(variant = VarInt)]
@@ -156,28 +156,28 @@ pub struct LoginPluginSuccess {
     pub data: Vec<u8>,
 }
 
-packet_node!(#[derive(Debug)] ClientHandshakePacket => [
+packet_node!(#[derive(Debug, PartialEq)] ClientHandshakePacket => [
     Handshaking
 ]);
 
-packet_node!(#[derive(Debug)] ClientStatusPacket => [
+packet_node!(#[derive(Debug, PartialEq)] ClientStatusPacket => [
     StatusRequest,
     StatusPing
 ]);
 
-packet_node!(#[derive(Debug)] ServerStatusPacket => [
+packet_node!(#[derive(Debug, PartialEq)] ServerStatusPacket => [
     StatusResponse,
     StatusPong
 ]);
 
-packet_node!(#[derive(Debug)] ServerLoginPacket => [
+packet_node!(#[derive(Debug, PartialEq)] ServerLoginPacket => [
     LoginDisconnect,
     LoginEncryptionRequest,
     LoginSetCompression,
     LoginPluginRequest
 ]);
 
-packet_node!(#[derive(Debug)] ClientLoginPacket => [
+packet_node!(#[derive(Debug, PartialEq)] ClientLoginPacket => [
     LoginStart,
     LoginEncryptionResponse,
     LoginPluginSuccess

@@ -35,14 +35,15 @@ impl<const BUFFER_SIZE: usize> ReadStreamQueue<BUFFER_SIZE> {
 
     async fn read_next_bytes(&mut self) -> InputPacketBytesResult<()> {
         match self.read_half.read(&mut self.buffer).await {
+            Ok(0) | Err(_) => Err(
+                CustomError::StaticStr("Connection was closed during reading").into()
+            ),
             Ok(len) => {
                 self.buffer_size = len;
                 self.buffer_offset = 0;
+                log::debug!("Received bytes: {:?}", &self.buffer[0..self.buffer_size]);
                 Ok(())
             }
-            Err(_) => Err(
-                CustomError::StaticStr("Connection was closed during reading").into()
-            )
         }
     }
 
@@ -128,7 +129,7 @@ impl<const BUFFER_SIZE: usize> InputPacketBytes for ReadStreamQueue<BUFFER_SIZE>
     }
 
     fn remaining_bytes(&self) -> usize {
-        match self.packet_offset > self.packet_offset {
+        match self.packet_length > self.packet_offset {
             true => self.packet_length - self.packet_offset,
             false => 0
         }

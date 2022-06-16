@@ -1,6 +1,7 @@
 use crate::packet::*;
 use crate::types::*;
 use crate::packet_bytes::*;
+use crate::packet_default::*;
 
 mod primitives {
     use super::*;
@@ -13,15 +14,20 @@ mod primitives {
             2_u16.write(&mut output).await.unwrap();
             53232323_u32.write(&mut output).await.unwrap();
             43295438_i32.write(&mut output).await.unwrap();
-            assert_eq!(output.data, vec![0x01, 0x02, 0x00, 0xc3, 0x42, 0x2c, 0x03, 0xce, 0xa2, 0x94, 0x02])
+            assert_eq!(output.data, vec![
+                0x01,
+                0x00, 0x02,
+                0x03, 0x2c, 0x42, 0xc3,
+                0x02, 0x94, 0xa2, 0xce,
+            ])
         }
         {
             let mut input = InputPacketBytesPrepared::from(
                 vec![0x03, 0xc3, 0x33, 0x21, 0x49, 0x12, 0x32]
             );
             assert_eq!(u8::read(&mut input).await.unwrap(), 0x03);
-            assert_eq!(u32::read(&mut input).await.unwrap(), 0x492133c3);
-            assert_eq!(u16::read(&mut input).await.unwrap(), 0x3212);
+            assert_eq!(u32::read(&mut input).await.unwrap(), 0xc3332149);
+            assert_eq!(u16::read(&mut input).await.unwrap(), 0x1232);
         }
     }
 
@@ -43,7 +49,7 @@ mod primitives {
                     0x80, 0x80, 0x80, 0x80, 0x08,
                     0xff, 0xff, 0xff, 0xff, 0x0f,
                     0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x7f,
-                    0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x01
+                    0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x01,
                 ]
             );
             let mut input = InputPacketBytesPrepared::from(output);
@@ -76,6 +82,55 @@ mod primitives {
             position.write(&mut output).await.unwrap();
             let mut input = InputPacketBytesPrepared::from(output);
             assert_eq!(BlockPosition::read(&mut input).await.unwrap(), position);
+        }
+    }
+}
+
+mod packets {
+    use super::*;
+
+    #[actix_rt::test]
+    async fn handshake_test() {
+        {
+            let mut output = OutputPacketBytesVec::new();
+            <Handshaking as PacketWritable>::write(
+                Handshaking {
+                    next_state: 1,
+                    server_address: "localhost".into(),
+                    server_port: 25565,
+                    protocol_version: 759,
+                }, &mut output,
+            ).await.unwrap();
+            assert_eq!(output.data, vec![0, 247, 5, 9, 108, 111, 99, 97, 108, 104, 111, 115, 116, 99, 221, 1])
+        }
+        {
+            let mut input = InputPacketBytesPrepared::from(
+                vec![247, 5, 9, 108, 111, 99, 97, 108, 104, 111, 115, 116, 99, 221, 1]
+            );
+            assert_eq!(
+                <Handshaking as PacketReadable>::read(&mut input).await.unwrap(),
+                Handshaking {
+                    next_state: 1,
+                    server_address: "localhost".into(),
+                    server_port: 25565,
+                    protocol_version: 759,
+                }
+            );
+        }
+        {
+            let mut input = InputPacketBytesPrepared::from(
+                vec![0, 247, 5, 9, 108, 111, 99, 97, 108, 104, 111, 115, 116, 99, 221, 1]
+            );
+            let packet = ClientHandshakePacket::read(&mut input).await.unwrap();
+            assert_eq!(
+                packet,
+                ClientHandshakePacket::Handshaking(Handshaking {
+                    next_state: 1,
+                    server_address: "localhost".into(),
+                    server_port: 25565,
+                    protocol_version: 759,
+                })
+            )
         }
     }
 }
