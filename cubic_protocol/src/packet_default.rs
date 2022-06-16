@@ -133,11 +133,17 @@ pub struct LoginPluginRequest {
     pub data: Vec<u8>,
 }
 
+#[derive(PacketWritable, PacketReadable, Debug, PartialEq)]
+pub struct LoginStartSignatureData {
+    pub timestamp: i64,
+    pub data: SignatureData,
+}
+
 #[derive(Packet, Debug, PartialEq)]
 #[packet(id = 0x00, side = Client, state = Login, protocol = 0)]
 pub struct LoginStart {
     pub name: String,
-    pub signature_data: Option<SignatureData>,
+    pub signature_data: Option<LoginStartSignatureData>,
 }
 
 #[derive(Packet, Debug, PartialEq)]
