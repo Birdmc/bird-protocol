@@ -12,6 +12,8 @@ pub struct PacketAttributes {
     pub state: Attribute<String>,
     pub side: Attribute<String>,
     pub protocol: Attribute<i32>,
+    pub writable: Attribute<bool>,
+    pub readable: Attribute<bool>,
 }
 
 #[derive(Debug, Default)]
@@ -56,6 +58,13 @@ pub fn expr_to_string(expr: &Expr) -> syn::Result<String> {
             str[1..str.len() - 1].to_string()
         }),
         it => Err(syn::Error::new(it.span(), "Expected string")),
+    }
+}
+
+pub fn expr_to_bool(expr: &Expr) -> syn::Result<bool> {
+    match expr_to_lit(expr)? {
+        Lit::Bool(boolean) => Ok(boolean.value),
+        it => Err(syn::Error::new(it.span(), "Expected boolean")),
     }
 }
 
@@ -104,6 +113,10 @@ impl TryFrom<Attributes> for PacketAttributes {
                 attr, vec!["side".into()], expr_to_string)?,
             protocol: get_attribute(
                 attr, vec!["protocol".into()], expr_to_int)?,
+            readable: get_attribute(
+                attr, vec!["readable".into()], expr_to_bool)?,
+            writable: get_attribute(
+                attr, vec!["writable".into()], expr_to_bool)?
         })
     }
 }
