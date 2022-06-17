@@ -14,7 +14,7 @@ async-trait = "0.1.53"
 fastnbt = "2.1.0"
 quick-error = "2.0.1"
 uuid = { version = "1.0.0", features = ["serde"] }
-cubic-protocol-derive = { path = "../cubic_protocol_derive", version = "0.1.6", optional = true }
+cubic-protocol-derive = { path = "../cubic_protocol_derive", version = "0.1.7", optional = true }
 
 [features]
 derive = ["dep:cubic-protocol-derive"]
