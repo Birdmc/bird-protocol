@@ -1,3 +1,4 @@
+use std::fs::read;
 use cubic_protocol::packet::{CustomError, InputPacketBytes, InputPacketBytesError, InputPacketBytesResult, PacketReadable, PacketReadableResult};
 use tokio::io::AsyncReadExt;
 use tokio::net::tcp::OwnedReadHalf;
@@ -12,13 +13,25 @@ unsafe impl Send for SlicePointer {}
 
 unsafe impl Sync for SlicePointer {}
 
-pub(crate) struct ReadStreamQueue<const BUFFER_SIZE: usize> {
+pub struct ReadStreamQueue<const BUFFER_SIZE: usize> {
     read_half: OwnedReadHalf,
     packet_length: usize,
     packet_offset: usize,
     buffer: [u8; BUFFER_SIZE],
     buffer_size: usize,
     buffer_offset: usize,
+}
+
+impl<const BUFFER_SIZE: usize> From<OwnedReadHalf> for ReadStreamQueue<BUFFER_SIZE> {
+    fn from(read_half: OwnedReadHalf) -> Self {
+        ReadStreamQueue::new(read_half)
+    }
+}
+
+impl<const BUFFER_SIZE: usize> From<ReadStreamQueue<BUFFER_SIZE>> for OwnedReadHalf {
+    fn from(queue: ReadStreamQueue<BUFFER_SIZE>) -> Self {
+        queue.read_half
+    }
 }
 
 impl<const BUFFER_SIZE: usize> ReadStreamQueue<BUFFER_SIZE> {

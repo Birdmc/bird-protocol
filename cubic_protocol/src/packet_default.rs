@@ -29,7 +29,7 @@ pub struct StatusResponseVersion {
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct StatusResponseSample {
     pub name: String,
-    pub uuid: Uuid,
+    pub id: Uuid,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
