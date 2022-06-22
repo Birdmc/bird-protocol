@@ -46,6 +46,13 @@ impl<const BUFFER_SIZE: usize> ReadStreamQueue<BUFFER_SIZE> {
         }
     }
 
+    pub fn close(self) -> (OwnedReadHalf, Box<[u8]>) {
+        (
+            self.read_half,
+            Box::new(self.buffer[self.buffer_offset..self.buffer_size])
+        )
+    }
+
     async fn read_next_bytes(&mut self) -> InputPacketBytesResult<()> {
         match self.read_half.read(&mut self.buffer).await {
             Ok(0) | Err(_) => Err(
