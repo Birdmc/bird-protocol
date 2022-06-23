@@ -8,8 +8,8 @@ use crate::types::*;
 
 packet_enum! {
     #[derive(Debug, Clone, Copy, PartialEq)] HandshakeNextState, VarInt => {
-        Login = 1,
-        Status = 2,
+        Status = 1,
+        Login = 2,
     }
 }
 
