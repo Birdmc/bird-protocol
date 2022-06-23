@@ -26,19 +26,19 @@ pub struct Handshaking {
     pub next_state: HandshakeNextState,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct StatusResponseVersion {
     pub name: String,
     pub protocol: i32,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct StatusResponseSample {
     pub name: String,
     pub id: Uuid,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct StatusResponsePlayers {
     pub max: i32,
     pub online: i32,
@@ -46,7 +46,7 @@ pub struct StatusResponsePlayers {
     pub sample: Vec<StatusResponseSample>,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 #[serde(untagged)]
 pub enum StatusResponseDescription {
     Component(ComponentType),
@@ -59,7 +59,7 @@ impl Default for StatusResponseDescription {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct StatusResponseObject {
     pub version: StatusResponseVersion,
     pub players: StatusResponsePlayers,
