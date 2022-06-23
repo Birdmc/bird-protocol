@@ -1,4 +1,3 @@
-use std::fs::read;
 use cubic_protocol::packet::{CustomError, InputPacketBytes, InputPacketBytesError, InputPacketBytesResult, PacketReadable, PacketReadableResult};
 use tokio::io::AsyncReadExt;
 use tokio::net::tcp::OwnedReadHalf;

@@ -3,8 +3,15 @@ use cubic_chat::identifier::Identifier;
 use uuid::Uuid;
 use cubic_protocol_derive::{Packet, PacketWritable, PacketReadable};
 use serde::{Serialize, Deserialize};
-use crate::packet_node;
+use crate::{packet_enum, packet_node};
 use crate::types::*;
+
+packet_enum! {
+    #[derive(Debug, Clone, Copy, PartialEq)] HandshakeNextState, VarInt => {
+        Login = 1,
+        Status = 2,
+    }
+}
 
 type RemainingBytesArrayU8 = RemainingBytesArray<u8>;
 type LengthProvidedArrayU8VarInt = LengthProvidedArray<u8, VarInt>;
@@ -16,8 +23,7 @@ pub struct Handshaking {
     pub protocol_version: i32,
     pub server_address: String,
     pub server_port: u16,
-    #[pf(variant = VarInt)]
-    pub next_state: i32,
+    pub next_state: HandshakeNextState,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
@@ -91,7 +97,7 @@ pub struct StatusPing {
 #[derive(Packet, Debug, PartialEq)]
 #[packet(id = 0x00, side = Server, state = Login, protocol = 0)]
 pub struct LoginDisconnect {
-    pub reason: ComponentType
+    pub reason: ComponentType,
 }
 
 #[derive(PacketWritable, PacketReadable, Debug, PartialEq)]

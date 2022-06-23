@@ -5,5 +5,6 @@ pub mod types;
 pub mod packet_default;
 pub mod packet_node;
 pub mod packet_bytes;
+pub mod packet_enum;
 #[cfg(test)]
 mod tests;
