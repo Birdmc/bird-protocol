@@ -21,6 +21,12 @@ pub struct FieldAttributes {
     pub variant: Attribute<String>,
 }
 
+#[derive(Debug, Default)]
+pub struct EnumAttributes {
+    pub variant: Attribute<String>,
+    pub primitive: Attribute<String>,
+}
+
 #[derive(Default)]
 pub struct Attributes {
     pub attributes: HashMap<String, Expr>,
@@ -142,5 +148,53 @@ impl TryFrom<Attributes> for FieldAttributes {
 impl Parse for FieldAttributes {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         FieldAttributes::try_from(input.parse::<Attributes>()?)
+    }
+}
+
+impl TryFrom<Attributes> for EnumAttributes {
+    type Error = syn::Error;
+
+    fn try_from(attributes: Attributes) -> Result<Self, Self::Error> {
+        let attr = &attributes;
+        Ok(EnumAttributes {
+            variant: get_attribute(
+                attr, vec!["variant".into(), "var".into()], expr_to_string)?,
+            primitive: get_attribute(
+                attr, vec!["primitive".into(), "pr".into()], expr_to_string)?,
+        })
+    }
+}
+
+impl Parse for EnumAttributes {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        EnumAttributes::try_from(input.parse::<Attributes>()?)
+    }
+}
+
+impl EnumAttributes {
+    fn from_one(attribute: (String, Span)) -> Self {
+        let (value, span) = attribute;
+        let primitive = match value.as_str() {
+            "VarInt" => "i32",
+            "VarLong" => "i64",
+            other => other
+        }.into();
+        Self {
+            variant: Some((value, span)),
+            primitive: Some((primitive, span.clone()))
+        }
+    }
+
+    pub fn into_filled(self) -> syn::Result<Self> {
+        if self.primitive.is_none() && self.variant.is_none() {
+            return Err(syn::Error::new(Span::call_site(), "packet_enum should have primitive or variant variables"))
+        }
+        if self.primitive.is_some() && self.variant.is_some() {
+            return Ok(self)
+        }
+        Ok(Self::from_one(match self.primitive.is_some() {
+            true => self.primitive.unwrap(),
+            false => self.variant.unwrap()
+        }))
     }
 }

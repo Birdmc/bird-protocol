@@ -55,7 +55,7 @@ pub fn packet_macro_impl(input: &DeriveInput) -> syn::Result<proc_macro::TokenSt
         input.generics.split_for_impl();
     let ident = &input.ident;
 
-    // As because rust is not supporting const traits (Expiremental)
+    // As because rust is not supporting const traits (Experimental)
     // So we create const variables to use ids in patterns and const functions
     let const_packet = proc_macro::TokenStream::from(quote! {
         impl #impl_generics #ident #ty_generics #where_clause {
