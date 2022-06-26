@@ -44,7 +44,7 @@ pub fn expr_to_lit(expr: &Expr) -> syn::Result<Lit> {
     match expr {
         Expr::Lit(ref lit) => Ok(lit.lit.clone()),
         Expr::Path(ref path) => Ok(Lit::Str(LitStr::new(
-            path_to_string(path).as_str(), path.span()
+            path_to_string(path).as_str(), path.span(),
         ))),
         it => Err(syn::Error::new(it.span(), "Expected literal"))
     }
@@ -122,7 +122,7 @@ impl TryFrom<Attributes> for PacketAttributes {
             readable: get_attribute(
                 attr, vec!["readable".into()], expr_to_bool)?,
             writable: get_attribute(
-                attr, vec!["writable".into()], expr_to_bool)?
+                attr, vec!["writable".into()], expr_to_bool)?,
         })
     }
 }
@@ -181,20 +181,29 @@ impl EnumAttributes {
         }.into();
         Self {
             variant: Some((value, span)),
-            primitive: Some((primitive, span.clone()))
+            primitive: Some((primitive, span.clone())),
         }
     }
 
     pub fn into_filled(self) -> syn::Result<Self> {
         if self.primitive.is_none() && self.variant.is_none() {
-            return Err(syn::Error::new(Span::call_site(), "packet_enum should have primitive or variant variables"))
+            return Err(syn::Error::new(Span::call_site(), "packet_enum should have primitive or variant variables"));
         }
         if self.primitive.is_some() && self.variant.is_some() {
-            return Ok(self)
+            return Ok(self);
         }
         Ok(Self::from_one(match self.primitive.is_some() {
             true => self.primitive.unwrap(),
             false => self.variant.unwrap()
         }))
+    }
+
+    pub fn find_one(attributes: &Vec<syn::Attribute>) -> syn::Result<Option<Self>> {
+        attributes
+            .iter()
+            .find(|attr| attr.path.is_ident("packet_enum") || attr.path.is_ident("pe"))
+            .map(|attr| attr.parse_args::<Self>())
+            .map(|attr| attr.map(|val| Some(val)))
+            .unwrap_or_else(|| Ok(None))
     }
 }

@@ -91,15 +91,16 @@ mod packets {
 
     #[actix_rt::test]
     async fn handshake_test() {
+        let handshake_packet = Handshaking {
+            next_state: HandshakeNextState::Status,
+            server_address: "localhost".into(),
+            server_port: 25565,
+            protocol_version: 759,
+        };
         {
             let mut output = OutputPacketBytesVec::new();
             <Handshaking as PacketWritable>::write(
-                Handshaking {
-                    next_state: 1,
-                    server_address: "localhost".into(),
-                    server_port: 25565,
-                    protocol_version: 759,
-                }, &mut output,
+                handshake_packet.clone(), &mut output,
             ).await.unwrap();
             assert_eq!(output.data, vec![0, 247, 5, 9, 108, 111, 99, 97, 108, 104, 111, 115, 116, 99, 221, 1])
         }
@@ -109,12 +110,7 @@ mod packets {
             );
             assert_eq!(
                 <Handshaking as PacketReadable>::read(&mut input).await.unwrap(),
-                Handshaking {
-                    next_state: 1,
-                    server_address: "localhost".into(),
-                    server_port: 25565,
-                    protocol_version: 759,
-                }
+                handshake_packet.clone()
             );
         }
         {
@@ -124,12 +120,7 @@ mod packets {
             let packet = ClientHandshakePacket::read(&mut input).await.unwrap();
             assert_eq!(
                 packet,
-                ClientHandshakePacket::Handshaking(Handshaking {
-                    next_state: 1,
-                    server_address: "localhost".into(),
-                    server_port: 25565,
-                    protocol_version: 759,
-                })
+                ClientHandshakePacket::Handshaking(handshake_packet.clone())
             )
         }
     }

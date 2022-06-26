@@ -151,13 +151,13 @@ impl CEnumFieldsVisitor for CEnumReadVisitor {
 pub fn build_read_for_enum(attrs: &Vec<Attribute>, data_enum: &DataEnum) -> syn::Result<TokenStream> {
     match is_c_enum(data_enum) {
         true => {
-            let enum_attributes: EnumAttributes = match attrs
-                .iter()
-                .find(|attr| attr.path.is_ident("pe") || attr.path.is_ident("packet_enum"))
-                .map(|attr| attr.parse_args()) {
-                Some(attr) => attr?,
-                None => return Err(syn::Error::new(Span::call_site(), "didn't found packet_enum attribute")),
-            };
+            let enum_attributes =
+                match EnumAttributes::find_one(&attrs)?
+                {
+                    Some(attr) => attr,
+                    None => return Err(syn::Error::new(
+                        Span::call_site(), "didn't found packet_enum attribute")),
+                };
             let cp_crate = get_crate();
             let enum_attributes = enum_attributes.into_filled()?;
             let (value, span) = enum_attributes.primitive.unwrap();

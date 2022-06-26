@@ -3,20 +3,12 @@ use cubic_chat::identifier::Identifier;
 use uuid::Uuid;
 use cubic_protocol_derive::{Packet, PacketWritable, PacketReadable};
 use serde::{Serialize, Deserialize};
-use crate::{packet_enum, packet_node};
+use crate::packet_node;
 use crate::types::*;
 
-packet_enum! {
-    #[derive(Debug, Clone, Copy, PartialEq)]
-    HandshakeNextState, VarInt => {
-        Status = 1,
-        Login = 2,
-    }
-}
-
-#[derive(PacketReadable, Debug, PartialEq, Clone, Copy)]
+#[derive(PacketReadable, PacketWritable, Debug, PartialEq, Clone, Copy)]
 #[pe(variant = VarInt)]
-pub enum HandshakeNextState_ {
+pub enum HandshakeNextState {
     Status = 1,
     Login
 }
