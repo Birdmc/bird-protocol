@@ -10,7 +10,7 @@ pub fn async_trait(implementation: TokenStream) -> proc_macro::TokenStream {
 }
 
 pub fn get_crate() -> TokenStream {
-    match proc_macro_crate::crate_name("cubic-protocol").unwrap() {
+    match proc_macro_crate::crate_name("bird-protocol").unwrap() {
         proc_macro_crate::FoundCrate::Itself => quote! {crate},
         proc_macro_crate::FoundCrate::Name(name) => {
             let ident = Ident::new(name.as_str(), Span::call_site());

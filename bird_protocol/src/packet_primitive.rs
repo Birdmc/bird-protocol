@@ -1,5 +1,5 @@
-use cubic_chat::component::ComponentType;
-use cubic_chat::identifier::Identifier;
+use bird_chat::component::ComponentType;
+use bird_chat::identifier::Identifier;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use uuid::Uuid;

@@ -1,7 +1,7 @@
-use cubic_chat::component::ComponentType;
-use cubic_chat::identifier::Identifier;
+use bird_chat::component::ComponentType;
+use bird_chat::identifier::Identifier;
 use uuid::Uuid;
-use cubic_protocol_derive::{Packet, PacketWritable, PacketReadable};
+use bird_protocol_derive::{Packet, PacketWritable, PacketReadable};
 use serde::{Serialize, Deserialize};
 use crate::packet_node;
 use crate::types::*;
