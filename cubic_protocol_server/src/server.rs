@@ -4,6 +4,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::*;
 use cubic_protocol::packet::PacketState;
+use tokio::task::yield_now;
 use crate::connection::Connection;
 use crate::handler::{ConnectionHandler, ReadHandler};
 use crate::read::ReadStreamQueue;
@@ -90,6 +91,9 @@ async fn run_connection<
             log::debug!("Received error while handling next packet: {:?}", err);
             break;
         }
+        // if user sends too many data, only his data will be handled on the threads
+        // yield_now prevents it.
+        yield_now();
     }
     let _ = connection.close().await;
 }

@@ -3,6 +3,7 @@ use tokio::*;
 use tokio::io::AsyncWriteExt;
 use tokio::net::tcp::OwnedWriteHalf;
 use tokio::sync::mpsc::Receiver;
+use tokio::task::yield_now;
 use crate::connection::Connection;
 use crate::handler::{ConnectionHandler, ReadHandler};
 use crate::server::ProtocolServerDeclare;
@@ -31,6 +32,7 @@ impl WriteStreamQueue {
                 WriteMessage::Bytes(bytes) =>
                     self.write_half.write_all(bytes.as_slice()).await?,
             }
+            yield_now()
         }
         Ok(())
     }
