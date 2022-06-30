@@ -1,8 +1,8 @@
 use std::net::SocketAddr;
 use tokio::sync::mpsc::Sender;
-use cubic_protocol::packet::{CustomError, PacketWritable, PacketWritableResult};
-use cubic_protocol::packet_bytes::OutputPacketBytesVec;
-use cubic_protocol::types::VarInt;
+use bird_protocol::packet::{CustomError, PacketWritable, PacketWritableResult};
+use bird_protocol::packet_bytes::OutputPacketBytesVec;
+use bird_protocol::types::VarInt;
 use crate::write::{WriteMessage};
 
 pub struct Connection {

@@ -32,7 +32,7 @@ impl WriteStreamQueue {
                 WriteMessage::Bytes(bytes) =>
                     self.write_half.write_all(bytes.as_slice()).await?,
             }
-            yield_now()
+            yield_now().await;
         }
         Ok(())
     }

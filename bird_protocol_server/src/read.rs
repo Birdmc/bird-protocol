@@ -1,7 +1,7 @@
-use cubic_protocol::packet::{CustomError, InputPacketBytes, InputPacketBytesError, InputPacketBytesResult, PacketReadable, PacketReadableResult};
+use bird_protocol::packet::{CustomError, InputPacketBytes, InputPacketBytesError, InputPacketBytesResult, PacketReadable, PacketReadableResult};
 use tokio::io::AsyncReadExt;
 use tokio::net::tcp::OwnedReadHalf;
-use cubic_protocol::types::VarInt;
+use bird_protocol::types::VarInt;
 
 #[derive(Clone, Copy)]
 struct SlicePointer {

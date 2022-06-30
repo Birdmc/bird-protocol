@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::*;
-use cubic_protocol::packet::PacketState;
+use bird_protocol::packet::PacketState;
 use tokio::task::yield_now;
 use crate::connection::Connection;
 use crate::handler::{ConnectionHandler, ReadHandler};
@@ -93,7 +93,7 @@ async fn run_connection<
         }
         // if user sends too many data, only his data will be handled on the threads
         // yield_now prevents it.
-        yield_now();
+        yield_now().await;
     }
     let _ = connection.close().await;
 }

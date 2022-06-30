@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 use std::sync::Arc;
-use cubic_protocol::packet::{InputPacketBytes, PacketReadable, PacketReadableResult, PacketState};
+use bird_protocol::packet::{InputPacketBytes, PacketReadable, PacketReadableResult, PacketState};
 use crate::connection::Connection;
 
 pub trait ConnectionHandler: Sized + Sync + Send {
