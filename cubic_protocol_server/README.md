@@ -1,1 +1,0 @@
-Protocol server for [CubicProtocol](https://github.com/Cubicmc/cubic-protocol)

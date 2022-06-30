@@ -1,7 +1,7 @@
 [workspace]
 members = [
-    "cubic_protocol_server",
-    "cubic_protocol_derive",
-    "cubic_protocol",
+    "bird_protocol_server",
+    "bird_protocol_derive",
+    "bird_protocol",
 ]
 

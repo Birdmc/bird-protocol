@@ -1,6 +1,6 @@
 [package]
-name = "cubic-protocol"
-version = "0.1.11"
+name = "bird-protocol"
+version = "0.1.0"
 edition = "2021"
 description = "Minecraft protocol on rust"
 license = "MIT"
@@ -14,10 +14,10 @@ async-trait = "0.1.53"
 fastnbt = "2.1.0"
 quick-error = "2.0.1"
 uuid = { version = "1.0.0", features = ["serde"] }
-cubic-protocol-derive = { path = "../cubic_protocol_derive", version = "0.1.7", optional = true }
+bird-protocol-derive = { path = "../bird_protocol_derive", version = "0.1.0", optional = true }
 
 [features]
-derive = ["dep:cubic-protocol-derive"]
+derive = ["dep:bird-protocol-derive"]
 default_packets = ["derive"]
 all = ["default_packets", "derive"]
 

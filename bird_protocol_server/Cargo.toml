@@ -1,12 +1,12 @@
 [package]
-name = "cubic-protocol-server"
-version = "0.1.9"
+name = "bird-protocol-server"
+version = "0.1.0"
 edition = "2021"
 description = "ProtocolServer for CubicProtocol"
 license = "MIT"
 
 [dependencies]
-cubic-protocol = "0.1.8"
+bird-protocol = "0.1.0"
 async-trait = "0.1.56"
 tokio = { version = "1.19.2", features = ["full"] }
 log = "0.4.17"

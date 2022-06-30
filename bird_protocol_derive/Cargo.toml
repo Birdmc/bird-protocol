@@ -1,6 +1,6 @@
 [package]
-name = "cubic-protocol-derive"
-version = "0.1.7"
+name = "bird-protocol-derive"
+version = "0.1.0"
 edition = "2021"
 description = "Packet, PacketReadable, PacketWritable derives for CubicProtocol"
 license = "MIT"
