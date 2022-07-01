@@ -19,6 +19,9 @@ pub struct PacketAttributes {
 #[derive(Debug, Default)]
 pub struct FieldAttributes {
     pub variant: Attribute<String>,
+    pub write: Attribute<String>,
+    pub read: Attribute<String>,
+    pub write_lifetime: Attribute<bool>,
 }
 
 #[derive(Debug, Default)]
@@ -141,6 +144,12 @@ impl TryFrom<Attributes> for FieldAttributes {
         Ok(FieldAttributes {
             variant: get_attribute(
                 attr, vec!["variant".into(), "var".into()], expr_to_string)?,
+            read: get_attribute(
+                attr, vec!["read".into()], expr_to_string)?,
+            write: get_attribute(
+                attr, vec!["write".into()], expr_to_string)?,
+            write_lifetime: get_attribute(
+                attr, vec!["write_lifetime".into(), "wl".into()], expr_to_bool)?
         })
     }
 }

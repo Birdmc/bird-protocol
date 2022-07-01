@@ -4,7 +4,7 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use uuid::Uuid;
 use crate::packet::{CustomError, InputPacketBytes, OutputPacketBytes, PacketReadable, PacketReadableResult, PacketWritable, PacketWritableResult};
-use crate::types::{Angle, BlockPosition, LengthProvidedArray, ProtocolJson, RemainingBytesArray, VarInt, VarLong};
+use crate::types::{Angle, BlockPosition, ReadLengthProvidedArray, ReadProtocolJson, ReadRemainingBytesArray, VarInt, VarLong, WriteLengthProvidedArray, WriteProtocolJson, WriteRemainingBytesArray};
 
 #[async_trait::async_trait]
 impl PacketReadable for u8 {
@@ -15,8 +15,8 @@ impl PacketReadable for u8 {
 
 #[async_trait::async_trait]
 impl PacketWritable for u8 {
-    async fn write(self, output: &mut impl OutputPacketBytes) -> PacketWritableResult {
-        output.write_byte(self).await.map_err(|err| CustomError::Error(err).into())
+    async fn write(&self, output: &mut impl OutputPacketBytes) -> PacketWritableResult {
+        output.write_byte(*self).await.map_err(|err| CustomError::Error(err).into())
     }
 }
 
@@ -29,8 +29,8 @@ impl PacketReadable for i8 {
 
 #[async_trait::async_trait]
 impl PacketWritable for i8 {
-    async fn write(self, output: &mut impl OutputPacketBytes) -> PacketWritableResult {
-        (self as u8).write(output).await
+    async fn write(&self, output: &mut impl OutputPacketBytes) -> PacketWritableResult {
+        (*self as u8).write(output).await
     }
 }
 
@@ -43,7 +43,7 @@ impl PacketReadable for bool {
 
 #[async_trait::async_trait]
 impl PacketWritable for bool {
-    async fn write(self, output: &mut impl OutputPacketBytes) -> PacketWritableResult {
+    async fn write(&self, output: &mut impl OutputPacketBytes) -> PacketWritableResult {
         match self {
             true => 1_u8,
             false => 0_u8
@@ -61,7 +61,7 @@ impl PacketReadable for Angle {
 
 #[async_trait::async_trait]
 impl PacketWritable for Angle {
-    async fn write(self, output: &mut impl OutputPacketBytes) -> PacketWritableResult {
+    async fn write(&self, output: &mut impl OutputPacketBytes) -> PacketWritableResult {
         ((self.radians * 256.0 / std::f32::consts::PI) as u8).write(output).await
     }
 }
@@ -106,14 +106,14 @@ impl PacketReadable for String {
 
 #[async_trait::async_trait]
 impl PacketWritable for String {
-    async fn write(self, output: &mut impl OutputPacketBytes) -> PacketWritableResult {
+    async fn write(&self, output: &mut impl OutputPacketBytes) -> PacketWritableResult {
         self.as_str().write(output).await
     }
 }
 
 #[async_trait::async_trait]
 impl PacketWritable for &str {
-    async fn write(self, output: &mut impl OutputPacketBytes) -> PacketWritableResult {
+    async fn write(&self, output: &mut impl OutputPacketBytes) -> PacketWritableResult {
         write_string_with_limit(output, self, STRING_LIMIT).await
     }
 }
@@ -140,7 +140,7 @@ impl PacketReadable for BlockPosition {
 
 #[async_trait::async_trait]
 impl PacketWritable for BlockPosition {
-    async fn write(self, output: &mut impl OutputPacketBytes) -> PacketWritableResult {
+    async fn write(&self, output: &mut impl OutputPacketBytes) -> PacketWritableResult {
         let x = self.x as i64;
         let y = self.y as i64;
         let z = self.z as i64;
@@ -162,7 +162,7 @@ impl PacketReadable for Identifier {
 
 #[async_trait::async_trait]
 impl PacketWritable for Identifier {
-    async fn write(self, output: &mut impl OutputPacketBytes) -> PacketWritableResult {
+    async fn write(&self, output: &mut impl OutputPacketBytes) -> PacketWritableResult {
         self.to_string().write(output).await
     }
 }
@@ -178,7 +178,7 @@ impl PacketReadable for ComponentType {
 
 #[async_trait::async_trait]
 impl PacketWritable for ComponentType {
-    async fn write(self, output: &mut impl OutputPacketBytes) -> PacketWritableResult {
+    async fn write(&self, output: &mut impl OutputPacketBytes) -> PacketWritableResult {
         let str = serde_json::to_string(&self)
             .map_err(|err| CustomError::Error(Box::new(err)))?;
         write_string_with_limit(output, &str, CHAT_LIMIT).await
@@ -186,18 +186,18 @@ impl PacketWritable for ComponentType {
 }
 
 #[async_trait::async_trait]
-impl<T: DeserializeOwned> PacketReadable for ProtocolJson<T> {
+impl<T: DeserializeOwned> PacketReadable for ReadProtocolJson<T> {
     async fn read(input: &mut impl InputPacketBytes) -> PacketReadableResult<Self> {
         serde_json::from_str(String::read(input).await?.as_str())
             .map_err(|err| CustomError::Error(Box::new(err)).into())
-            .map(|val| ProtocolJson::new(val))
+            .map(|value| ReadProtocolJson { value })
     }
 }
 
 #[async_trait::async_trait]
-impl<T: Serialize + Send + Sync> PacketWritable for ProtocolJson<T> {
-    async fn write(self, output: &mut impl OutputPacketBytes) -> PacketWritableResult {
-        let str = serde_json::to_string(self.get())
+impl<'a, T: Serialize + Send + Sync> PacketWritable for WriteProtocolJson<'a, T> {
+    async fn write(&self, output: &mut impl OutputPacketBytes) -> PacketWritableResult {
+        let str = serde_json::to_string(self.value)
             .map_err(|err| CustomError::Error(Box::new(err)))?;
         str.write(output).await
     }
@@ -215,7 +215,7 @@ impl PacketReadable for Uuid {
 
 #[async_trait::async_trait]
 impl PacketWritable for Uuid {
-    async fn write(self, output: &mut impl OutputPacketBytes) -> PacketWritableResult {
+    async fn write(&self, output: &mut impl OutputPacketBytes) -> PacketWritableResult {
         output.write_bytes(self.as_bytes()).await
             .map_err(|err| CustomError::Error(err).into())
     }
@@ -234,9 +234,9 @@ impl<T: PacketReadable> PacketReadable for Option<T> {
 
 #[async_trait::async_trait]
 impl<T: PacketWritable + Send + Sync> PacketWritable for Option<T> {
-    async fn write(self, output: &mut impl OutputPacketBytes) -> PacketWritableResult {
+    async fn write(&self, output: &mut impl OutputPacketBytes) -> PacketWritableResult {
         match self {
-            Some(val) => {
+            Some(ref val) => {
                 true.write(output).await?;
                 val.write(output).await
             }
@@ -255,7 +255,7 @@ pub async fn read_vec<T: PacketReadable>(
 }
 
 pub async fn write_vec<T: PacketWritable>(
-    vec: Vec<T>, output: &mut impl OutputPacketBytes) -> PacketWritableResult {
+    vec: &Vec<T>, output: &mut impl OutputPacketBytes) -> PacketWritableResult {
     for value in vec {
         value.write(output).await?
     }
@@ -263,17 +263,17 @@ pub async fn write_vec<T: PacketWritable>(
 }
 
 #[async_trait::async_trait]
-impl<T: PacketReadable + Send + Sync> PacketReadable for RemainingBytesArray<T> {
+impl<T: PacketReadable + Send + Sync> PacketReadable for ReadRemainingBytesArray<T> {
     async fn read(input: &mut impl InputPacketBytes) -> PacketReadableResult<Self> {
         let length = input.remaining_bytes();
-        Ok(RemainingBytesArray::new(read_vec(length, input).await?))
+        Ok(ReadRemainingBytesArray::new(read_vec(length, input).await?))
     }
 }
 
 #[async_trait::async_trait]
-impl<T: PacketWritable + Send + Sync> PacketWritable for RemainingBytesArray<T> {
-    async fn write(self, output: &mut impl OutputPacketBytes) -> PacketWritableResult {
-        write_vec(self.value, output).await?;
+impl<'a, T: PacketWritable + Send + Sync> PacketWritable for WriteRemainingBytesArray<'a, T> {
+    async fn write(&self, output: &mut impl OutputPacketBytes) -> PacketWritableResult {
+        write_vec(&self.value, output).await?;
         Ok(())
     }
 }
@@ -285,19 +285,19 @@ pub trait USizePossible {
 }
 
 #[async_trait::async_trait]
-impl<T: PacketReadable + Send + Sync, S: PacketReadable + USizePossible> PacketReadable for LengthProvidedArray<T, S> {
+impl<T: PacketReadable + Send + Sync, S: PacketReadable + USizePossible> PacketReadable for ReadLengthProvidedArray<T, S> {
     async fn read(input: &mut impl InputPacketBytes) -> PacketReadableResult<Self> {
         let length = S::read(input).await?.into_usize();
-        Ok(LengthProvidedArray::new(read_vec(length, input).await?))
+        Ok(ReadLengthProvidedArray::new(read_vec(length, input).await?))
     }
 }
 
 #[async_trait::async_trait]
-impl<T: PacketWritable + Send + Sync,
-    S: PacketWritable + USizePossible + Send + Sync> PacketWritable for LengthProvidedArray<T, S> {
-    async fn write(self, output: &mut impl OutputPacketBytes) -> PacketWritableResult {
+impl<'a, T: PacketWritable + Send + Sync,
+    S: PacketWritable + USizePossible + Send + Sync> PacketWritable for WriteLengthProvidedArray<'a, T, S> {
+    async fn write(&self, output: &mut impl OutputPacketBytes) -> PacketWritableResult {
         S::from_usize(self.value.len()).write(output).await?;
-        write_vec(self.value, output).await
+        write_vec(&self.value, output).await
     }
 }
 
@@ -324,7 +324,7 @@ macro_rules! num {
 
         #[async_trait::async_trait]
         impl PacketWritable for $type {
-            async fn write(self, output: &mut impl OutputPacketBytes) -> PacketWritableResult {
+            async fn write(&self, output: &mut impl OutputPacketBytes) -> PacketWritableResult {
                 output.write_bytes(&self.to_be_bytes()).await
                     .map_err(|err| CustomError::Error(err).into())
             }
@@ -370,8 +370,8 @@ macro_rules! var_num {
 
         #[async_trait::async_trait]
         impl PacketWritable for $var_num_type {
-            async fn write(self, output: &mut impl OutputPacketBytes) -> PacketWritableResult {
-                let mut u_self = <$num_type>::from(self) as $unsigned_num_type;
+            async fn write(&self, output: &mut impl OutputPacketBytes) -> PacketWritableResult {
+                let mut u_self = <$num_type>::from(*self) as $unsigned_num_type;
                 loop {
                     if ((u_self & !0x7F) == 0) {
                         (u_self as u8).write(output).await?;

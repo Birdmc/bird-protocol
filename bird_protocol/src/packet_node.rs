@@ -16,10 +16,10 @@ macro_rules! packet_node {
 
         #[async_trait::async_trait]
         impl $crate::packet::PacketWritable for $node_ident {
-            async fn write(self, output: &mut impl $crate::packet::OutputPacketBytes) ->
+            async fn write(&self, output: &mut impl $crate::packet::OutputPacketBytes) ->
                 $crate::packet::PacketWritableResult {
                 Ok(match self {
-                    $(Self::$packet_ident(packet) => packet.write(output).await?,)*
+                    $(Self::$packet_ident(ref packet) => packet.write(output).await?,)*
                 }.into())
             }
         }

@@ -100,7 +100,7 @@ mod packets {
         {
             let mut output = OutputPacketBytesVec::new();
             <Handshaking as PacketWritable>::write(
-                handshake_packet.clone(), &mut output,
+                &handshake_packet, &mut output,
             ).await.unwrap();
             assert_eq!(output.data, vec![0, 247, 5, 9, 108, 111, 99, 97, 108, 104, 111, 115, 116, 99, 221, 1])
         }
@@ -110,7 +110,7 @@ mod packets {
             );
             assert_eq!(
                 <Handshaking as PacketReadable>::read(&mut input).await.unwrap(),
-                handshake_packet.clone()
+                handshake_packet
             );
         }
         {
@@ -120,7 +120,7 @@ mod packets {
             let packet = ClientHandshakePacket::read(&mut input).await.unwrap();
             assert_eq!(
                 packet,
-                ClientHandshakePacket::Handshaking(handshake_packet.clone())
+                ClientHandshakePacket::Handshaking(handshake_packet)
             )
         }
     }

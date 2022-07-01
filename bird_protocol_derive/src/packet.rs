@@ -105,7 +105,7 @@ pub fn packet_macro_impl(input: &DeriveInput) -> syn::Result<proc_macro::TokenSt
             let write_body = build_writable_function_body(input)?;
             let write_body = quote! {
                 <#cp_crate::types::VarInt as #cp_crate::packet::PacketWritable>::write(
-                    <Self as #cp_crate::packet::Packet>::id().into(),
+                    &<Self as #cp_crate::packet::Packet>::id().into(),
                     output
                 ).await?;
                 #write_body

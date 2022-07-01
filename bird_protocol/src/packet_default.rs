@@ -13,8 +13,10 @@ pub enum HandshakeNextState {
     Login
 }
 
-type RemainingBytesArrayU8 = RemainingBytesArray<u8>;
-type LengthProvidedArrayU8VarInt = LengthProvidedArray<u8, VarInt>;
+type WriteRemainingBytesArrayU8<'a> = WriteRemainingBytesArray<'a, u8>;
+type ReadRemainingBytesArrayU8 = ReadRemainingBytesArray<u8>;
+type WriteLengthProvidedArrayU8VarInt<'a> = WriteLengthProvidedArray<'a, u8, VarInt>;
+type ReadLengthProvidedArrayU8VarInt = ReadLengthProvidedArray<u8, VarInt>;
 
 #[derive(Packet, Debug, PartialEq, Clone)]
 #[packet(id = 0x00, side = Client, state = Handshake, protocol = 0)]
@@ -69,12 +71,13 @@ pub struct StatusResponseObject {
     pub favicon: String,
 }
 
-type StatusResponseObjectJson = ProtocolJson<StatusResponseObject>;
+type ReadStatusResponseObjectJson = ReadProtocolJson<StatusResponseObject>;
+type WriteStatusResponseObjectJson<'a> = WriteProtocolJson<'a, StatusResponseObject>;
 
 #[derive(Packet, Debug, PartialEq, Clone)]
 #[packet(id = 0x00, side = Server, state = Status, protocol = 0)]
 pub struct StatusResponse {
-    #[pf(variant = StatusResponseObjectJson)]
+    #[pf(write = WriteStatusResponseObjectJson, read = ReadStatusResponseObjectJson, wl = true)]
     pub response: StatusResponseObject,
 }
 
@@ -102,9 +105,9 @@ pub struct LoginDisconnect {
 
 #[derive(PacketWritable, PacketReadable, Debug, PartialEq, Clone)]
 pub struct SignatureData {
-    #[pf(variant = LengthProvidedArrayU8VarInt)]
+    #[pf(write = WriteLengthProvidedArrayU8VarInt, read = ReadLengthProvidedArrayU8VarInt, wl = true)]
     pub public_key: Vec<u8>,
-    #[pf(variant = LengthProvidedArrayU8VarInt)]
+    #[pf(write = WriteLengthProvidedArrayU8VarInt, read = ReadLengthProvidedArrayU8VarInt, wl = true)]
     pub signature: Vec<u8>,
 }
 
@@ -135,7 +138,7 @@ pub struct LoginPluginRequest {
     #[pf(variant = VarInt)]
     pub message_id: i32,
     pub channel: Identifier,
-    #[pf(variant = RemainingBytesArrayU8)]
+    #[pf(write = WriteRemainingBytesArrayU8, read = ReadRemainingBytesArrayU8, wl = true)]
     pub data: Vec<u8>,
 }
 
@@ -164,7 +167,7 @@ pub struct LoginPluginSuccess {
     #[pf(variant = VarInt)]
     pub message_id: i32,
     pub successful: bool,
-    #[pf(variant = RemainingBytesArrayU8)]
+    #[pf(write = WriteRemainingBytesArrayU8, read = ReadRemainingBytesArrayU8, wl = true)]
     pub data: Vec<u8>,
 }
 

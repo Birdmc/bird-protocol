@@ -36,12 +36,21 @@ impl WritableVisitor {
 impl FieldVisitor for WritableVisitor {
     fn visit(&mut self, name: Ident, field: &Field, attributes: FieldAttributes) -> syn::Result<()> {
         let WritableVisitor { object_ts, .. } = self;
-        let writable_value = match attributes.variant {
+        let writable_value = match attributes.write.or(attributes.variant) {
             Some((variant, span)) => {
                 let variant_ident = Ident::new(variant.as_str(), span);
+
+                let lifetime_spec = match attributes.write_lifetime {
+                    Some((value, _)) => match value {
+                        true => quote! {<'_>},
+                        false => quote! {}
+                    }
+                    None => quote! {}
+                };
+
                 (
-                    quote! {#variant_ident},
-                    quote! {#variant_ident::from(#object_ts #name)}
+                    quote! {#variant_ident #lifetime_spec},
+                    quote! {#variant_ident::from(& #object_ts #name)},
                 )
             }
             None => {
@@ -60,7 +69,7 @@ impl FieldVisitor for WritableVisitor {
 
 pub fn write_ts(ty: TokenStream, value: TokenStream) -> TokenStream {
     let cp_crate = get_crate();
-    quote! {<#ty as #cp_crate::packet::PacketWritable>::write(#value, output).await?;}
+    quote! {<#ty as #cp_crate::packet::PacketWritable>::write(& #value, output).await?;}
 }
 
 #[allow(unused)]
@@ -91,7 +100,7 @@ pub fn build_writable_function_body(input: &DeriveInput) -> syn::Result<TokenStr
                 let variant = Ident::new(value.as_str(), span);
                 quote! {
                     <#variant as #cp_crate::packet::PacketWritable>::write(
-                        #variant::from(self as #primitive), output
+                        &#variant::from(*self as #primitive), output
                     ).await
                 }
             }
@@ -137,7 +146,7 @@ pub fn writable_trait_from_body(input: &DeriveInput, func_body: TokenStream) -> 
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     Ok(async_trait(quote! {
         impl #impl_generics #cp_crate::packet::PacketWritable for #ident #ty_generics #where_clause {
-            async fn write(self, output: &mut impl #cp_crate::packet::OutputPacketBytes) -> #cp_crate::packet::PacketWritableResult {
+            async fn write(&self, output: &mut impl #cp_crate::packet::OutputPacketBytes) -> #cp_crate::packet::PacketWritableResult {
                 #func_body
             }
         }

@@ -84,7 +84,7 @@ pub fn read_ts(ty: TokenStream) -> TokenStream {
 }
 
 fn read_ts_variant(_ident: &Ident, field: &Field, attributes: &FieldAttributes) -> TokenStream {
-    match &attributes.variant {
+    match attributes.read.as_ref().or(attributes.variant.as_ref()) {
         Some((variant, span)) => {
             let ident = Ident::new(variant.as_str(), span.clone());
             let read_st = read_ts(quote! { #ident });

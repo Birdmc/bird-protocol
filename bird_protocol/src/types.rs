@@ -4,98 +4,82 @@ use euclid::default::Vector3D;
 pub type Angle = euclid::Angle<f32>;
 pub type BlockPosition = Vector3D<i32>;
 
-pub struct ProtocolJson<T> {
-    pub value: T,
-}
-
-pub struct ProtocolNbt<T> {
-    pub value: T,
-}
-
-pub struct RemainingBytesArray<T> {
+pub struct ReadRemainingBytesArray<T> {
     pub value: Vec<T>,
 }
 
-impl<T> RemainingBytesArray<T> {
+pub struct WriteRemainingBytesArray<'a, T> {
+    pub value: &'a Vec<T>,
+}
+
+impl<T> ReadRemainingBytesArray<T> {
     pub fn new(value: Vec<T>) -> Self {
         Self { value }
     }
+}
 
-    pub fn get(&self) -> &Vec<T> {
-        &self.value
+impl<T> From<ReadRemainingBytesArray<T>> for Vec<T> {
+    fn from(value: ReadRemainingBytesArray<T>) -> Self {
+        value.value
     }
 }
 
-impl<T> From<Vec<T>> for RemainingBytesArray<T> {
-    fn from(value: Vec<T>) -> Self {
-        RemainingBytesArray::new(value)
+impl<'a, T> From<&'a Vec<T>> for WriteRemainingBytesArray<'a, T> {
+    fn from(value: &'a Vec<T>) -> Self {
+        Self { value }
     }
 }
 
-impl<T> From<RemainingBytesArray<T>> for Vec<T> {
-    fn from(array: RemainingBytesArray<T>) -> Self {
-        array.value
-    }
-}
-
-pub struct LengthProvidedArray<T, S> {
+pub struct ReadLengthProvidedArray<T, S> {
     pub value: Vec<T>,
     size: PhantomData<S>,
 }
 
-impl<T, S> LengthProvidedArray<T, S> {
+pub struct WriteLengthProvidedArray<'a, T, S> {
+    pub value: &'a Vec<T>,
+    size: PhantomData<S>,
+}
+
+impl<T, S> ReadLengthProvidedArray<T, S> {
     pub fn new(value: Vec<T>) -> Self {
         Self { value, size: PhantomData }
     }
+}
 
-    pub fn get(&self) -> &Vec<T> {
-        &self.value
+impl<T, S> From<ReadLengthProvidedArray<T, S>> for Vec<T> {
+    fn from(value: ReadLengthProvidedArray<T, S>) -> Self {
+        value.value
     }
 }
 
-impl<T, S> From<Vec<T>> for LengthProvidedArray<T, S> {
-    fn from(value: Vec<T>) -> Self {
-        LengthProvidedArray::new(value)
+impl<'a, T, S> From<&'a Vec<T>> for WriteLengthProvidedArray<'a, T, S> {
+    fn from(value: &'a Vec<T>) -> Self {
+        Self { value, size: PhantomData }
     }
 }
 
-impl<T, S> From<LengthProvidedArray<T, S>> for Vec<T> {
-    fn from(array: LengthProvidedArray<T, S>) -> Self {
-        array.value
-    }
-}
+macro_rules! advanced_container_type {
+    ($write: ident, $read: ident) => {
+        pub struct $read<T> {
+            pub value: T
+        }
 
-impl<T> ProtocolJson<T> {
-    pub fn new(value: T) -> Self {
-        Self { value }
-    }
+        pub struct $write<'a, T> {
+            pub value: &'a T
+        }
 
-    pub fn get(&self) -> &T {
-        &self.value
-    }
 
-    pub fn into(self) -> T {
-        self.value
-    }
-}
+        impl<T> $read<T> {
+            pub fn into(self) -> T {
+                self.value
+            }
+        }
 
-impl<T> From<T> for ProtocolJson<T> {
-    fn from(val: T) -> Self {
-        ProtocolJson::new(val)
-    }
-}
-
-impl<T> ProtocolNbt<T> {
-    pub fn new(value: T) -> Self {
-        Self { value }
-    }
-
-    pub fn get(&self) -> &T {
-        &self.value
-    }
-
-    pub fn int(self) -> T {
-        self.value
+        impl<'a, T> $write<'a, T> {
+            pub fn from(value: &'a T) -> Self {
+                Self { value }
+            }
+        }
     }
 }
 
@@ -115,8 +99,16 @@ macro_rules! container_type {
                 $name(value)
             }
         }
+
+        impl From<& $contained> for $name {
+            fn from(value: & $contained) -> Self {
+                $name(*value)
+            }
+        }
     }
 }
 
+advanced_container_type!(WriteProtocolJson, ReadProtocolJson);
+advanced_container_type!(WriteProtocolNbt, ReadProtocolNbt);
 container_type!(VarInt, i32);
 container_type!(VarLong, i64);
