@@ -85,9 +85,8 @@ pub fn read_ts(ty: TokenStream) -> TokenStream {
 
 fn read_ts_variant(_ident: &Ident, field: &Field, attributes: &FieldAttributes) -> TokenStream {
     match attributes.read.as_ref().or(attributes.variant.as_ref()) {
-        Some((variant, span)) => {
-            let ident = Ident::new(variant.as_str(), span.clone());
-            let read_st = read_ts(quote! { #ident });
+        Some((_, expr, _)) => {
+            let read_st = read_ts(quote! { #expr });
             quote! { #read_st .into() }
         }
         None => {
@@ -125,10 +124,8 @@ pub fn build_read_for_enum(attrs: &Vec<Attribute>, enum_ident: &Ident, data_enum
                 };
             let cp_crate = get_crate();
             let enum_attributes = enum_attributes.into_filled()?;
-            let (value, span) = enum_attributes.primitive.unwrap();
-            let primitive = Ident::new(value.as_str(), span);
-            let (value, span) = enum_attributes.variant.unwrap();
-            let variant = Ident::new(value.as_str(), span);
+            let (_, primitive, _) = enum_attributes.primitive.unwrap();
+            let (_, variant, _) = enum_attributes.variant.unwrap();
             let mut counter: usize = 0;
             let mut values = quote! {};
             let mut matches = quote! {};

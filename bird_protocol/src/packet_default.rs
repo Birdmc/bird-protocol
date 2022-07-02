@@ -77,7 +77,7 @@ type WriteStatusResponseObjectJson<'a> = WriteProtocolJson<'a, StatusResponseObj
 #[derive(Packet, Debug, PartialEq, Clone)]
 #[packet(id = 0x00, side = Server, state = Status, protocol = 0)]
 pub struct StatusResponse {
-    #[pf(write = WriteStatusResponseObjectJson, read = ReadStatusResponseObjectJson, wl = true)]
+    #[pf(write = WriteStatusResponseObjectJson, read = ReadStatusResponseObjectJson)]
     pub response: StatusResponseObject,
 }
 
@@ -105,9 +105,9 @@ pub struct LoginDisconnect {
 
 #[derive(PacketWritable, PacketReadable, Debug, PartialEq, Clone)]
 pub struct SignatureData {
-    #[pf(write = WriteLengthProvidedArrayU8VarInt, read = ReadLengthProvidedArrayU8VarInt, wl = true)]
+    #[pf(write = WriteLengthProvidedArrayU8VarInt, read = ReadLengthProvidedArrayU8VarInt)]
     pub public_key: Vec<u8>,
-    #[pf(write = WriteLengthProvidedArrayU8VarInt, read = ReadLengthProvidedArrayU8VarInt, wl = true)]
+    #[pf(write = WriteLengthProvidedArrayU8VarInt, read = ReadLengthProvidedArrayU8VarInt)]
     pub signature: Vec<u8>,
 }
 
@@ -167,7 +167,7 @@ pub struct LoginPluginSuccess {
     #[pf(variant = VarInt)]
     pub message_id: i32,
     pub successful: bool,
-    #[pf(write = WriteRemainingBytesArrayU8, read = ReadRemainingBytesArrayU8, wl = true)]
+    #[pf(write = WriteRemainingBytesArrayU8, read = ReadRemainingBytesArrayU8)]
     pub data: Vec<u8>,
 }
 

@@ -17,25 +17,25 @@ pub fn validate_packet_attributes(packet_attributes: PacketAttributes) -> syn::R
     let id = packet_attributes.id.unwrap();
     let state = packet_attributes.state.unwrap();
     let side = packet_attributes.side.unwrap();
-    let readable = packet_attributes.readable.map(|(value, _)| value).unwrap_or(true);
-    let writable = packet_attributes.writable.map(|(value, _)| value).unwrap_or(true);
+    let readable = packet_attributes.readable.map(|(value, _, _)| value).unwrap_or(true);
+    let writable = packet_attributes.writable.map(|(value, _, _)| value).unwrap_or(true);
 
     if id.0 < 0 {
-        return Err(syn::Error::new(id.1, "Id should not be negative"));
+        return Err(syn::Error::new(id.2, "Id should not be negative"));
     }
 
     match state.0.as_str() {
         "Handshake" | "Login" | "Status" | "Play" => {}
-        _ => return Err(syn::Error::new(state.1, "Possible states: Handshake, Login, Status, Play"))
+        _ => return Err(syn::Error::new(state.2, "Possible states: Handshake, Login, Status, Play"))
     }
 
     match side.0.as_str() {
         "Client" | "Server" => {}
-        _ => return Err(syn::Error::new(side.1, "Possible sides: Client, Server"))
+        _ => return Err(syn::Error::new(side.2, "Possible sides: Client, Server"))
     }
 
-    let side = Ident::new(side.0.as_str(), side.1);
-    let state = Ident::new(state.0.as_str(), state.1);
+    let side = Ident::new(side.0.as_str(), side.2);
+    let state = Ident::new(state.0.as_str(), state.2);
 
     Ok((id.0, side, state, protocol, readable, writable))
 }

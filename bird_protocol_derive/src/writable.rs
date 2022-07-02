@@ -37,20 +37,10 @@ impl FieldVisitor for WritableVisitor {
     fn visit(&mut self, name: Ident, field: &Field, attributes: FieldAttributes) -> syn::Result<()> {
         let WritableVisitor { object_ts, .. } = self;
         let writable_value = match attributes.write.or(attributes.variant) {
-            Some((variant, span)) => {
-                let variant_ident = Ident::new(variant.as_str(), span);
-
-                let lifetime_spec = match attributes.write_lifetime {
-                    Some((value, _)) => match value {
-                        true => quote! {<'_>},
-                        false => quote! {}
-                    }
-                    None => quote! {}
-                };
-
+            Some((_, variant, _)) => {
                 (
-                    quote! {#variant_ident #lifetime_spec},
-                    quote! {#variant_ident::from(& #object_ts #name)},
+                    quote! {#variant},
+                    quote! {<#variant>::from(& #object_ts #name)},
                 )
             }
             None => {
@@ -94,10 +84,8 @@ pub fn build_writable_function_body(input: &DeriveInput) -> syn::Result<TokenStr
                         Span::call_site(), "not C-like enums is not supported"))
                 };
                 let cp_crate = get_crate();
-                let (value, span) = enum_attributes.primitive.unwrap();
-                let primitive = Ident::new(value.as_str(), span);
-                let (value, span) = enum_attributes.variant.unwrap();
-                let variant = Ident::new(value.as_str(), span);
+                let (_, primitive, _) = enum_attributes.primitive.unwrap();
+                let (_, variant, _) = enum_attributes.variant.unwrap();
                 quote! {
                     <#variant as #cp_crate::packet::PacketWritable>::write(
                         &#variant::from(*self as #primitive), output

@@ -1,12 +1,13 @@
 use std::collections::HashMap;
-use proc_macro2::Span;
+use proc_macro2::{Ident, Span};
+use quote::ToTokens;
 use syn::{Lit, Expr, ExprPath, LitStr, Token};
 use syn::parse::{Parse, ParseStream};
 use syn::spanned::Spanned;
 
-pub type Attribute<T> = Option<(T, Span)>;
+pub type Attribute<T> = Option<(T, syn::Expr, Span)>;
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct PacketAttributes {
     pub id: Attribute<i32>,
     pub state: Attribute<String>,
@@ -16,15 +17,14 @@ pub struct PacketAttributes {
     pub readable: Attribute<bool>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct FieldAttributes {
-    pub variant: Attribute<String>,
-    pub write: Attribute<String>,
-    pub read: Attribute<String>,
-    pub write_lifetime: Attribute<bool>,
+    pub variant: Attribute<()>,
+    pub write: Attribute<()>,
+    pub read: Attribute<()>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct EnumAttributes {
     pub variant: Attribute<String>,
     pub primitive: Attribute<String>,
@@ -83,7 +83,7 @@ pub fn get_attribute<T>(attributes: &Attributes,
     for name in names {
         match attributes.attributes.get(&name) {
             Some(expr) => return Ok(Some(
-                (parse(expr)?, expr.span())
+                (parse(expr)?, expr.clone(), expr.span())
             )),
             None => continue,
         }
@@ -143,13 +143,11 @@ impl TryFrom<Attributes> for FieldAttributes {
         let attr = &attributes;
         Ok(FieldAttributes {
             variant: get_attribute(
-                attr, vec!["variant".into(), "var".into()], expr_to_string)?,
+                attr, vec!["variant".into(), "var".into()], |_| Ok(()))?,
             read: get_attribute(
-                attr, vec!["read".into()], expr_to_string)?,
+                attr, vec!["read".into()], |_| Ok(()))?,
             write: get_attribute(
-                attr, vec!["write".into()], expr_to_string)?,
-            write_lifetime: get_attribute(
-                attr, vec!["write_lifetime".into(), "wl".into()], expr_to_bool)?
+                attr, vec!["write".into()], |_| Ok(()))?,
         })
     }
 }
@@ -181,16 +179,26 @@ impl Parse for EnumAttributes {
 }
 
 impl EnumAttributes {
-    fn from_one(attribute: (String, Span)) -> Self {
-        let (value, span) = attribute;
-        let primitive = match value.as_str() {
+    fn from_single(attribute: (String, syn::Expr, Span)) -> Self {
+        let (value, _, span) = attribute;
+        let primitive: String = match value.as_str() {
             "VarInt" => "i32",
             "VarLong" => "i64",
             other => other
         }.into();
+        let variant_ident = Ident::new(value.as_str(), span.clone());
+        let primitive_ident = Ident::new(primitive.as_str(), span.clone());
         Self {
-            variant: Some((value, span)),
-            primitive: Some((primitive, span.clone())),
+            variant: Some((
+                value,
+                syn::Expr::Verbatim(variant_ident.to_token_stream()),
+                span.clone()
+            )),
+            primitive: Some((
+                primitive,
+                syn::Expr::Verbatim(primitive_ident.to_token_stream()),
+                span
+            )),
         }
     }
 
@@ -201,7 +209,7 @@ impl EnumAttributes {
         if self.primitive.is_some() && self.variant.is_some() {
             return Ok(self);
         }
-        Ok(Self::from_one(match self.primitive.is_some() {
+        Ok(Self::from_single(match self.primitive.is_some() {
             true => self.primitive.unwrap(),
             false => self.variant.unwrap()
         }))
