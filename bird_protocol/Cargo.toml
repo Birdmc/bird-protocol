@@ -11,6 +11,7 @@ euclid = "0.22.7"
 bird-chat = "0.1.0"
 serde_json = "1.0.81"
 async-trait = "0.1.53"
+async-recursion = "1.0.0"
 fastnbt = "2.1.0"
 quick-error = "2.0.1"
 uuid = { version = "1.0.0", features = ["serde"] }

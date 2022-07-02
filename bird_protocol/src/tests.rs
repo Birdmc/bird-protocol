@@ -125,3 +125,74 @@ mod packets {
         }
     }
 }
+
+mod nbt {
+    use super::*;
+
+    #[derive(serde::Serialize, serde::Deserialize)]
+    struct NbtTest {
+        pub name: String,
+    }
+
+    #[actix_rt::test]
+    async fn raw_test() {
+        let bytes = vec![
+            0xa, 0, 0, 0x8, 0, 0x4, 0x6e, 0x61, 0x6d, 0x65, 0,
+            0x9, 0x42, 0x61, 0x6e, 0x61, 0x6e, 0x72,
+            0x61, 0x6d, 0x61, 0,
+        ];
+        {
+            let mut input = InputPacketBytesPrepared::from(bytes.clone());
+            let value: NbtTest = ReadProtocolNbt::read(&mut input).await.unwrap().value;
+            assert_eq!(value.name, "Bananrama")
+        }
+        {
+            let mut output = OutputPacketBytesVec::new();
+            WriteProtocolNbt::from(&NbtTest {
+                name: "Bananrama".into()
+            }).write(&mut output).await.unwrap();
+            assert_eq!(output.data, bytes);
+        }
+    }
+
+    #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+    struct BigNbtTest {
+        pub a1: u8,
+        pub a2: i16,
+        pub a3: String,
+        pub a4: u64,
+        pub a5: i64,
+        pub a6: i32,
+        pub a7: u32,
+        pub a8: BigNbtTest2,
+    }
+
+    #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+    struct BigNbtTest2 {
+        pub a1: u16,
+        pub a2: u32,
+    }
+
+    #[actix_rt::test]
+    async fn big_test() {
+        let obj = BigNbtTest {
+            a1: 2,
+            a2: 43,
+            a3: "Some string".to_string(),
+            a4: 321,
+            a5: 5454,
+            a6: 432423,
+            a7: 312312,
+            a8: BigNbtTest2 {
+                a1: 3213,
+                a2: 321130,
+            },
+        };
+        {
+            let mut output = OutputPacketBytesVec::new();
+            WriteProtocolNbt::from(&obj).write(&mut output).await.unwrap();
+            let mut input = InputPacketBytesPrepared::from(output.data);
+            assert_eq!(ReadProtocolNbt::<BigNbtTest>::read(&mut input).await.unwrap().value, obj);
+        }
+    }
+}
