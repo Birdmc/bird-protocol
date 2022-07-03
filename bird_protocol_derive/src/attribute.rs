@@ -1,33 +1,33 @@
 use std::collections::HashMap;
-use proc_macro2::{Ident, Span};
+use proc_macro2::{Ident, Span, TokenStream};
 use quote::ToTokens;
 use syn::{Lit, Expr, ExprPath, LitStr, Token};
 use syn::parse::{Parse, ParseStream};
 use syn::spanned::Spanned;
 
-pub type Attribute<T> = Option<(T, syn::Expr, Span)>;
+pub type Attribute = Option<syn::Expr>;
 
 #[derive(Default)]
 pub struct PacketAttributes {
-    pub id: Attribute<i32>,
-    pub state: Attribute<String>,
-    pub side: Attribute<String>,
-    pub protocol: Attribute<i32>,
-    pub writable: Attribute<bool>,
-    pub readable: Attribute<bool>,
+    pub id: Attribute,
+    pub state: Attribute,
+    pub side: Attribute,
+    pub protocol: Attribute,
+    pub writable: Attribute,
+    pub readable: Attribute,
 }
 
 #[derive(Default)]
 pub struct FieldAttributes {
-    pub variant: Attribute<()>,
-    pub write: Attribute<()>,
-    pub read: Attribute<()>,
+    pub variant: Attribute,
+    pub write: Attribute,
+    pub read: Attribute,
 }
 
 #[derive(Default)]
 pub struct EnumAttributes {
-    pub variant: Attribute<String>,
-    pub primitive: Attribute<String>,
+    pub variant: Attribute,
+    pub primitive: Attribute,
 }
 
 #[derive(Default)]
@@ -53,13 +53,6 @@ pub fn expr_to_lit(expr: &Expr) -> syn::Result<Lit> {
     }
 }
 
-pub fn expr_to_int(expr: &Expr) -> syn::Result<i32> {
-    match expr_to_lit(expr)? {
-        Lit::Int(int) => int.base10_parse(),
-        it => Err(syn::Error::new(it.span(), "Expected i32")),
-    }
-}
-
 pub fn expr_to_string(expr: &Expr) -> syn::Result<String> {
     match expr_to_lit(expr)? {
         Lit::Str(str) => Ok({
@@ -77,14 +70,12 @@ pub fn expr_to_bool(expr: &Expr) -> syn::Result<bool> {
     }
 }
 
-pub fn get_attribute<T>(attributes: &Attributes,
+pub fn get_attribute(attributes: &Attributes,
                         names: Vec<String>,
-                        mut parse: impl FnMut(&Expr) -> syn::Result<T>) -> syn::Result<Attribute<T>> {
+) -> syn::Result<Attribute> {
     for name in names {
         match attributes.attributes.get(&name) {
-            Some(expr) => return Ok(Some(
-                (parse(expr)?, expr.clone(), expr.span())
-            )),
+            Some(expr) => return Ok(Some(expr.clone())),
             None => continue,
         }
     }
@@ -114,18 +105,12 @@ impl TryFrom<Attributes> for PacketAttributes {
     fn try_from(attributes: Attributes) -> syn::Result<Self> {
         let attr = &attributes;
         Ok(PacketAttributes {
-            id: get_attribute(
-                attr, vec!["id".into()], expr_to_int)?,
-            state: get_attribute(
-                attr, vec!["state".into()], expr_to_string)?,
-            side: get_attribute(
-                attr, vec!["side".into()], expr_to_string)?,
-            protocol: get_attribute(
-                attr, vec!["protocol".into()], expr_to_int)?,
-            readable: get_attribute(
-                attr, vec!["readable".into()], expr_to_bool)?,
-            writable: get_attribute(
-                attr, vec!["writable".into()], expr_to_bool)?,
+            id: get_attribute(attr, vec!["id".into()])?,
+            state: get_attribute(attr, vec!["state".into()])?,
+            side: get_attribute(attr, vec!["side".into()])?,
+            protocol: get_attribute(attr, vec!["protocol".into()])?,
+            readable: get_attribute(attr, vec!["readable".into()])?,
+            writable: get_attribute(attr, vec!["writable".into()])?,
         })
     }
 }
@@ -142,12 +127,9 @@ impl TryFrom<Attributes> for FieldAttributes {
     fn try_from(attributes: Attributes) -> syn::Result<Self> {
         let attr = &attributes;
         Ok(FieldAttributes {
-            variant: get_attribute(
-                attr, vec!["variant".into(), "var".into()], |_| Ok(()))?,
-            read: get_attribute(
-                attr, vec!["read".into()], |_| Ok(()))?,
-            write: get_attribute(
-                attr, vec!["write".into()], |_| Ok(()))?,
+            variant: get_attribute(attr, vec!["variant".into(), "var".into()])?,
+            read: get_attribute(attr, vec!["read".into()])?,
+            write: get_attribute(attr, vec!["write".into()])?,
         })
     }
 }
@@ -164,10 +146,8 @@ impl TryFrom<Attributes> for EnumAttributes {
     fn try_from(attributes: Attributes) -> Result<Self, Self::Error> {
         let attr = &attributes;
         Ok(EnumAttributes {
-            variant: get_attribute(
-                attr, vec!["variant".into(), "var".into()], expr_to_string)?,
-            primitive: get_attribute(
-                attr, vec!["primitive".into(), "pr".into()], expr_to_string)?,
+            variant: get_attribute(attr, vec!["variant".into(), "var".into()])?,
+            primitive: get_attribute(attr, vec!["primitive".into(), "pr".into()])?,
         })
     }
 }
@@ -179,27 +159,19 @@ impl Parse for EnumAttributes {
 }
 
 impl EnumAttributes {
-    fn from_single(attribute: (String, syn::Expr, Span)) -> Self {
-        let (value, _, span) = attribute;
-        let primitive: String = match value.as_str() {
+    fn from_single(attribute: syn::Expr) -> syn::Result<Self> {
+        let attribute_str = expr_to_string(&attribute)?;
+        let primitive: String = match attribute_str.as_str() {
             "VarInt" => "i32",
             "VarLong" => "i64",
             other => other
         }.into();
-        let variant_ident = Ident::new(value.as_str(), span.clone());
-        let primitive_ident = Ident::new(primitive.as_str(), span.clone());
-        Self {
-            variant: Some((
-                value,
-                syn::Expr::Verbatim(variant_ident.to_token_stream()),
-                span.clone()
-            )),
-            primitive: Some((
-                primitive,
-                syn::Expr::Verbatim(primitive_ident.to_token_stream()),
-                span
-            )),
-        }
+        let variant_ident = Ident::new(attribute_str.as_str(), attribute.span());
+        let primitive_ident = Ident::new(primitive.as_str(), attribute.span());
+        Ok(Self {
+            variant: Some(syn::Expr::Verbatim(variant_ident.to_token_stream())),
+            primitive: Some(syn::Expr::Verbatim(primitive_ident.to_token_stream())),
+        })
     }
 
     pub fn into_filled(self) -> syn::Result<Self> {
@@ -212,7 +184,7 @@ impl EnumAttributes {
         Ok(Self::from_single(match self.primitive.is_some() {
             true => self.primitive.unwrap(),
             false => self.variant.unwrap()
-        }))
+        })?)
     }
 
     pub fn find_one(attributes: &Vec<syn::Attribute>) -> syn::Result<Option<Self>> {

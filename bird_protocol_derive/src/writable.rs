@@ -37,7 +37,7 @@ impl FieldVisitor for WritableVisitor {
     fn visit(&mut self, name: Ident, field: &Field, attributes: FieldAttributes) -> syn::Result<()> {
         let WritableVisitor { object_ts, .. } = self;
         let writable_value = match attributes.write.or(attributes.variant) {
-            Some((_, variant, _)) => {
+            Some(variant) => {
                 (
                     quote! {#variant},
                     quote! {<#variant>::from(& #object_ts #name)},
@@ -84,8 +84,8 @@ pub fn build_writable_function_body(input: &DeriveInput) -> syn::Result<TokenStr
                         Span::call_site(), "not C-like enums is not supported"))
                 };
                 let cp_crate = get_crate();
-                let (_, primitive, _) = enum_attributes.primitive.unwrap();
-                let (_, variant, _) = enum_attributes.variant.unwrap();
+                let primitive = enum_attributes.primitive.unwrap();
+                let variant = enum_attributes.variant.unwrap();
                 quote! {
                     <#variant as #cp_crate::packet::PacketWritable>::write(
                         &#variant::from(*self as #primitive), output

@@ -7,38 +7,10 @@
 use syn::DeriveInput;
 use proc_macro2::{Ident, Span};
 use quote::quote;
-use crate::attribute::PacketAttributes;
+use crate::attribute::{expr_to_bool, PacketAttributes};
 use crate::readable_macro_impl;
 use crate::util::get_crate;
 use crate::writable::{build_writable_function_body, writable_trait_from_body};
-
-pub fn validate_packet_attributes(packet_attributes: PacketAttributes) -> syn::Result<(i32, Ident, Ident, i32, bool, bool)> {
-    let protocol = packet_attributes.protocol.unwrap().0;
-    let id = packet_attributes.id.unwrap();
-    let state = packet_attributes.state.unwrap();
-    let side = packet_attributes.side.unwrap();
-    let readable = packet_attributes.readable.map(|(value, _, _)| value).unwrap_or(true);
-    let writable = packet_attributes.writable.map(|(value, _, _)| value).unwrap_or(true);
-
-    if id.0 < 0 {
-        return Err(syn::Error::new(id.2, "Id should not be negative"));
-    }
-
-    match state.0.as_str() {
-        "Handshake" | "Login" | "Status" | "Play" => {}
-        _ => return Err(syn::Error::new(state.2, "Possible states: Handshake, Login, Status, Play"))
-    }
-
-    match side.0.as_str() {
-        "Client" | "Server" => {}
-        _ => return Err(syn::Error::new(side.2, "Possible sides: Client, Server"))
-    }
-
-    let side = Ident::new(side.0.as_str(), side.2);
-    let state = Ident::new(state.0.as_str(), state.2);
-
-    Ok((id.0, side, state, protocol, readable, writable))
-}
 
 pub fn packet_macro_impl(input: &DeriveInput) -> syn::Result<proc_macro::TokenStream> {
     let cp_crate = get_crate();
@@ -48,8 +20,18 @@ pub fn packet_macro_impl(input: &DeriveInput) -> syn::Result<proc_macro::TokenSt
         .map(|attribute| attribute.parse_args::<PacketAttributes>())
         .unwrap_or_else(|| Err(syn::Error::new(Span::call_site(), "Packet attribute necessary")))?;
 
-    let (id, side, state, protocol, readable, writable) =
-        validate_packet_attributes(packet_attributes)?;
+    let id = packet_attributes.id.unwrap();
+    let protocol = packet_attributes.protocol.unwrap();
+    let side = packet_attributes.side.unwrap();
+    let state = packet_attributes.state.unwrap();
+    let writable = match packet_attributes.writable {
+        Some(ref expr) => expr_to_bool(expr)?,
+        None => true,
+    };
+    let readable = match packet_attributes.readable {
+        Some(ref expr) => expr_to_bool(expr)?,
+        None => true,
+    };
 
     let (impl_generics, ty_generics, where_clause) =
         input.generics.split_for_impl();
@@ -57,10 +39,11 @@ pub fn packet_macro_impl(input: &DeriveInput) -> syn::Result<proc_macro::TokenSt
 
     // As because rust is not supporting const traits (Experimental)
     // So we create const variables to use ids in patterns and const functions
+    // also consts used in packet_node macro
     let const_packet = proc_macro::TokenStream::from(quote! {
         impl #impl_generics #ident #ty_generics #where_clause {
-            pub const ID: i32 = #id;
-            pub const PROTOCOL: i32 = #protocol;
+            pub const ID: i32 = (#id) as i32;
+            pub const PROTOCOL: i32 = (#protocol) as i32;
 
             pub const fn id() -> i32 {
                 Self::ID

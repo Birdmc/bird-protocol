@@ -6,6 +6,8 @@ use serde::{Serialize, Deserialize};
 use crate::packet_node;
 use crate::types::*;
 
+const PROTOCOL: i32 = 0;
+
 #[derive(PacketReadable, PacketWritable, Debug, PartialEq, Clone, Copy)]
 #[pe(variant = VarInt)]
 pub enum HandshakeNextState {
@@ -19,7 +21,7 @@ type WriteLengthProvidedArrayU8VarInt<'a> = WriteLengthProvidedArray<'a, u8, Var
 type ReadLengthProvidedArrayU8VarInt = ReadLengthProvidedArray<u8, VarInt>;
 
 #[derive(Packet, Debug, PartialEq, Clone)]
-#[packet(id = 0x00, side = Client, state = Handshake, protocol = 0)]
+#[packet(id = 0x00, side = Client, state = Handshake, protocol = PROTOCOL)]
 pub struct Handshaking {
     #[pf(variant = VarInt)]
     pub protocol_version: i32,
@@ -75,30 +77,30 @@ type ReadStatusResponseObjectJson = ReadProtocolJson<StatusResponseObject>;
 type WriteStatusResponseObjectJson<'a> = WriteProtocolJson<'a, StatusResponseObject>;
 
 #[derive(Packet, Debug, PartialEq, Clone)]
-#[packet(id = 0x00, side = Server, state = Status, protocol = 0)]
+#[packet(id = 0x00, side = Server, state = Status, protocol = PROTOCOL)]
 pub struct StatusResponse {
     #[pf(write = WriteStatusResponseObjectJson, read = ReadStatusResponseObjectJson)]
     pub response: StatusResponseObject,
 }
 
 #[derive(Packet, Debug, PartialEq, Clone)]
-#[packet(id = 0x01, side = Server, state = Status, protocol = 0)]
+#[packet(id = 0x01, side = Server, state = Status, protocol = PROTOCOL)]
 pub struct StatusPong {
     pub payload: i64,
 }
 
 #[derive(Packet, Debug, PartialEq, Clone)]
-#[packet(id = 0x00, side = Client, state = Status, protocol = 0)]
+#[packet(id = 0x00, side = Client, state = Status, protocol = PROTOCOL)]
 pub struct StatusRequest;
 
 #[derive(Packet, Debug, PartialEq, Clone)]
-#[packet(id = 0x01, side = Client, state = Status, protocol = 0)]
+#[packet(id = 0x01, side = Client, state = Status, protocol = PROTOCOL)]
 pub struct StatusPing {
     pub payload: i64,
 }
 
 #[derive(Packet, Debug, PartialEq, Clone)]
-#[packet(id = 0x00, side = Server, state = Login, protocol = 0)]
+#[packet(id = 0x00, side = Server, state = Login, protocol = PROTOCOL)]
 pub struct LoginDisconnect {
     pub reason: ComponentType,
 }
@@ -112,28 +114,28 @@ pub struct SignatureData {
 }
 
 #[derive(Packet, Debug, PartialEq, Clone)]
-#[packet(id = 0x01, side = Server, state = Login, protocol = 0)]
+#[packet(id = 0x01, side = Server, state = Login, protocol = PROTOCOL)]
 pub struct LoginEncryptionRequest {
     pub server_id: String,
     pub signature_data: SignatureData,
 }
 
 #[derive(Packet, Debug, PartialEq, Clone)]
-#[packet(id = 0x02, side = Server, state = Login, protocol = 0)]
+#[packet(id = 0x02, side = Server, state = Login, protocol = PROTOCOL)]
 pub struct LoginSuccess {
     pub uuid: Uuid,
     pub username: String,
 }
 
 #[derive(Packet, Debug, PartialEq, Clone)]
-#[packet(id = 0x03, side = Server, state = Login, protocol = 0)]
+#[packet(id = 0x03, side = Server, state = Login, protocol = PROTOCOL)]
 pub struct LoginSetCompression {
     #[pf(variant = VarInt)]
     pub threshold: i32,
 }
 
 #[derive(Packet, Debug, PartialEq, Clone)]
-#[packet(id = 0x04, side = Server, state = Login, protocol = 0)]
+#[packet(id = 0x04, side = Server, state = Login, protocol = PROTOCOL)]
 pub struct LoginPluginRequest {
     #[pf(variant = VarInt)]
     pub message_id: i32,
@@ -149,20 +151,20 @@ pub struct LoginStartSignatureData {
 }
 
 #[derive(Packet, Debug, PartialEq, Clone)]
-#[packet(id = 0x00, side = Client, state = Login, protocol = 0)]
+#[packet(id = 0x00, side = Client, state = Login, protocol = PROTOCOL)]
 pub struct LoginStart {
     pub name: String,
     pub signature_data: Option<LoginStartSignatureData>,
 }
 
 #[derive(Packet, Debug, PartialEq, Clone)]
-#[packet(id = 0x01, side = Client, state = Login, protocol = 0)]
+#[packet(id = 0x01, side = Client, state = Login, protocol = PROTOCOL)]
 pub struct LoginEncryptionResponse {
     pub signature_data: SignatureData,
 }
 
 #[derive(Packet, Debug, PartialEq, Clone)]
-#[packet(id = 0x02, side = Client, state = Login, protocol = 0)]
+#[packet(id = 0x02, side = Client, state = Login, protocol = PROTOCOL)]
 pub struct LoginPluginSuccess {
     #[pf(variant = VarInt)]
     pub message_id: i32,
