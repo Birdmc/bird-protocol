@@ -5,7 +5,7 @@
 /// Also it implement const Packet trait
 
 use syn::DeriveInput;
-use proc_macro2::{Ident, Span};
+use proc_macro2::Span;
 use quote::quote;
 use crate::attribute::{expr_to_bool, PacketAttributes};
 use crate::readable_macro_impl;

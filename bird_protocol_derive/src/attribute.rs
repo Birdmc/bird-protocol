@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use proc_macro2::{Ident, Span, TokenStream};
+use proc_macro2::{Ident, Span};
 use quote::ToTokens;
 use syn::{Lit, Expr, ExprPath, LitStr, Token};
 use syn::parse::{Parse, ParseStream};
@@ -28,6 +28,11 @@ pub struct FieldAttributes {
 pub struct EnumAttributes {
     pub variant: Attribute,
     pub primitive: Attribute,
+}
+
+#[derive(Default)]
+pub struct EnumFieldAttributes {
+    pub value: Attribute
 }
 
 #[derive(Default)]
@@ -194,5 +199,22 @@ impl EnumAttributes {
             .map(|attr| attr.parse_args::<Self>())
             .map(|attr| attr.map(|val| Some(val)))
             .unwrap_or_else(|| Ok(None))
+    }
+}
+
+impl TryFrom<Attributes> for EnumFieldAttributes {
+    type Error = syn::Error;
+
+    fn try_from(attributes: Attributes) -> Result<Self, Self::Error> {
+        let attr = &attributes;
+        Ok(Self {
+            value: get_attribute(attr, vec!["value".into()])?
+        })
+    }
+}
+
+impl Parse for EnumFieldAttributes {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        EnumFieldAttributes::try_from(input.parse::<Attributes>()?)
     }
 }

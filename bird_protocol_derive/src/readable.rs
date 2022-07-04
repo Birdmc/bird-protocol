@@ -1,8 +1,8 @@
 use proc_macro2::{Ident, Span, TokenStream};
-use quote::quote;
-use syn::{DeriveInput, Field, Fields, Data, parse_quote, DataEnum, Attribute};
+use quote::{quote, ToTokens};
+use syn::{DeriveInput, Field, Fields, Data, parse_quote, DataEnum, Attribute, Variant};
 use crate::attribute::{EnumAttributes, FieldAttributes};
-use crate::c_enum::is_c_enum;
+use crate::c_enum::{EnumVariantVisitor, visit_enum_variants};
 use crate::fields::{FieldVisitor, visit_fields};
 use crate::util::{add_trait_bounds, async_trait, get_crate};
 
@@ -112,53 +112,71 @@ pub fn build_read_for(fields: &Fields) -> syn::Result<TokenStream> {
     })
 }
 
+struct EnumVariantReadableVisitor {
+    pub consts: TokenStream,
+    pub matches: TokenStream,
+    primitive: TokenStream,
+    counter: usize,
+}
+
+impl EnumVariantReadableVisitor {
+    pub fn new(primitive: TokenStream) -> Self {
+        Self {
+            consts: TokenStream::new(),
+            matches: TokenStream::new(),
+            counter: 0,
+            primitive,
+        }
+    }
+}
+
+impl EnumVariantVisitor for EnumVariantReadableVisitor {
+    fn visit(&mut self, variant: &Variant, value: TokenStream) -> syn::Result<()> {
+        let consts = &self.consts;
+        let matches = &self.matches;
+        let primitive_ty= &self.primitive;
+        let variant_ident = &variant.ident;
+        let const_ident = Ident::new(format!("__{}", self.counter).as_str(), Span::call_site());
+        self.counter += 1;
+        self.consts = quote! {
+            #consts
+            const #const_ident: #primitive_ty = (#value) as #primitive_ty;
+        };
+        let variant_read = build_read_for(&variant.fields)?;
+        self.matches = quote! {
+            #matches
+            #const_ident => Self:: #variant_ident #variant_read,
+        };
+        Ok(())
+    }
+}
+
 pub fn build_read_for_enum(attrs: &Vec<Attribute>, enum_ident: &Ident, data_enum: &DataEnum) -> syn::Result<TokenStream> {
-    match is_c_enum(data_enum) {
-        true => {
-            let enum_attributes =
-                match EnumAttributes::find_one(&attrs)?
-                {
-                    Some(attr) => attr,
-                    None => return Err(syn::Error::new(
-                        Span::call_site(), "didn't found packet_enum attribute")),
-                };
+    match EnumAttributes::find_one(&attrs)? {
+        Some(attrs) => {
+            let attrs = attrs.into_filled()?;
             let cp_crate = get_crate();
-            let enum_attributes = enum_attributes.into_filled()?;
-            let primitive = enum_attributes.primitive.unwrap();
-            let variant = enum_attributes.variant.unwrap();
-            let mut counter: usize = 0;
-            let mut values = quote! {};
-            let mut matches = quote! {};
-            data_enum
-                .variants
-                .iter()
-                .for_each(|variant| {
-                    let variable_ident = Ident::new(
-                        format!("__{}", counter).as_str(), Span::call_site());
-                    let variant_ident = &variant.ident;
-                    values = quote!{
-                        #values
-                        const #variable_ident: #primitive = #enum_ident::#variant_ident as #primitive;
-                    };
-                    matches = quote! {
-                        #matches
-                        #variable_ident => Ok(Self::#variant_ident),
-                    };
-                    counter += 1;
-                });
-            Ok(quote!{
-                let value = #primitive::from(
-                    <#variant as #cp_crate::packet::PacketReadable>::read(input).await?);
-                #values
-                match value {
+            let primitive = attrs.primitive.to_token_stream();
+            let variant = attrs.variant.to_token_stream();
+            let mut readable_visitor = EnumVariantReadableVisitor::new(primitive.clone());
+            visit_enum_variants(&mut readable_visitor, enum_ident, data_enum)?;
+            let consts = readable_visitor.consts;
+            let matches = readable_visitor.matches;
+            Ok(quote! {
+                let value: #primitive = <#primitive>::from(
+                    <#variant as #cp_crate::packet::PacketReadable>::read(input).await?
+                );
+                #consts
+                Ok(match value {
                     #matches
-                    _ => Err(#cp_crate::packet::PacketReadableError::Custom(
+                    _ => return Err(#cp_crate::packet::PacketReadableError::Custom(
                         #cp_crate::packet::CustomError::StaticStr("Bad enum value")
                     ))
-                }
+                })
             })
         }
-        false => Err(syn::Error::new(Span::call_site(), "not C-like enums is not supported"))
+        None => return Err(syn::Error::new(
+            Span::call_site(), "didn't found packet_enum attribute")),
     }
 }
 

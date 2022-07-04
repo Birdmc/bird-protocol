@@ -1,22 +1,27 @@
-use proc_macro2::{Ident, Span, TokenStream};
-use quote::quote;
-use syn::{DeriveInput, Field, Fields, Data, parse_quote};
+use proc_macro2::{Ident, TokenStream};
+use quote::{quote, ToTokens};
+use syn::{DeriveInput, Field, Fields, Data, parse_quote, Variant};
 use syn::spanned::Spanned;
 use crate::attribute::{EnumAttributes, FieldAttributes};
-use crate::c_enum::is_c_enum;
-use crate::fields::{EnumFields, FieldVisitor, visit_fields};
+use crate::c_enum::{EnumVariantVisitor, visit_enum_variants};
+use crate::fields::{CollectFieldVisitor, EnumFields, FieldVisitor, visit_fields};
 use crate::util::{add_trait_bounds, async_trait, get_crate};
 
 pub struct WritableVisitor {
     object_ts: TokenStream,
     row_order: Vec<TokenStream>,
+    referencing: TokenStream,
 }
 
 impl WritableVisitor {
-    pub fn new(object_ts: TokenStream) -> WritableVisitor {
+    pub fn new(object_ts: TokenStream, referencing: bool) -> WritableVisitor {
         WritableVisitor {
             object_ts,
             row_order: Vec::new(),
+            referencing: match referencing {
+                true => quote!{&},
+                false => quote!{}
+            }
         }
     }
 
@@ -35,12 +40,12 @@ impl WritableVisitor {
 
 impl FieldVisitor for WritableVisitor {
     fn visit(&mut self, name: Ident, field: &Field, attributes: FieldAttributes) -> syn::Result<()> {
-        let WritableVisitor { object_ts, .. } = self;
+        let WritableVisitor { object_ts, referencing, .. } = self;
         let writable_value = match attributes.write.or(attributes.variant) {
             Some(variant) => {
                 (
                     quote! {#variant},
-                    quote! {<#variant>::from(& #object_ts #name)},
+                    quote! {<#variant>::from(#referencing #object_ts #name)},
                 )
             }
             None => {
@@ -57,46 +62,98 @@ impl FieldVisitor for WritableVisitor {
     }
 }
 
+pub struct EnumVariantWritableVisitor {
+    pub in_match: TokenStream,
+    pub primitive: TokenStream,
+    pub variant: TokenStream,
+}
+
+impl EnumVariantVisitor for EnumVariantWritableVisitor {
+    fn visit(&mut self, variant: &Variant, value: TokenStream) -> syn::Result<()> {
+        let cp_crate = get_crate();
+        let in_match = &self.in_match;
+        let primitive = &self.primitive;
+        let variant_ident = &variant.ident;
+        let mut collect_fields = CollectFieldVisitor::new();
+        visit_fields(&variant.fields, &mut collect_fields)?;
+        let collected_fields = collect_fields.get();
+        let mut field_idents = collected_fields
+            .iter()
+            .map(|(ident, _, _)| ident.clone())
+            .collect::<Vec<Ident>>();
+        let match_el_header = match variant.fields {
+            Fields::Unit => quote! {Self::#variant_ident},
+            Fields::Named(_) => {
+                quote! {
+                    Self::#variant_ident {
+                        #(#field_idents,)*
+                    }
+                }
+            }
+            Fields::Unnamed(_) => {
+                field_idents = field_idents
+                    .into_iter()
+                    .map(|ident| Ident::new(format!("__{}", ident).as_str(), ident.span()))
+                    .collect::<Vec<Ident>>();
+                quote! {
+                    Self::#variant_ident (
+                        #( #field_idents ,)*
+                    )
+                }
+            }
+        };
+        let mut writable_visitor = WritableVisitor::new(quote! {}, false);
+        for (ident, field, attrs) in collected_fields {
+            writable_visitor.visit(ident, &field, attrs)?;
+        }
+        let result_ts = writable_visitor.get_result();
+        let variant = &self.variant;
+        self.in_match = quote! {
+            #in_match
+            #match_el_header => {
+                <#variant as #cp_crate::packet::PacketWritable>::write(
+                        &#variant::from((#value) as #primitive), output
+                ).await?;
+                #result_ts
+            },
+        };
+        Ok(())
+    }
+}
+
 pub fn write_ts(ty: TokenStream, value: TokenStream) -> TokenStream {
     let cp_crate = get_crate();
     quote! {<#ty as #cp_crate::packet::PacketWritable>::write(& #value, output).await?;}
 }
 
-#[allow(unused)]
-pub fn generate_write(object_ts: TokenStream, fields: &Fields) -> syn::Result<TokenStream> {
-    let mut visitor = WritableVisitor::new(object_ts);
-    visit_fields(fields, &mut visitor)?;
-    Ok(visitor.get_result())
-}
-
 pub fn build_writable_function_body(input: &DeriveInput) -> syn::Result<TokenStream> {
     Ok(match input.data {
         Data::Struct(ref data_struct) => {
-            let mut visitor = WritableVisitor::new(quote! {self.});
+            let mut visitor = WritableVisitor::new(quote! {self.}, true);
             visit_fields(&data_struct.fields, &mut visitor)?;
             visitor.get_result_with_return()
         }
-        Data::Enum(ref data_enum) => match is_c_enum(data_enum) {
-            true => {
-                let enum_attributes = match EnumAttributes::find_one(&input.attrs)? {
-                    Some(attrs) => attrs.into_filled()?,
-                    None => return Err(syn::Error::new(
-                        Span::call_site(), "not C-like enums is not supported"))
-                };
-                let cp_crate = get_crate();
-                let primitive = enum_attributes.primitive.unwrap();
-                let variant = enum_attributes.variant.unwrap();
+        Data::Enum(ref data_enum) => match EnumAttributes::find_one(&input.attrs)? {
+            Some(attrs) => {
+                let attrs = attrs.into_filled()?;
+                let primitive = attrs.primitive.unwrap().to_token_stream();
+                let variant = attrs.variant.unwrap().to_token_stream();
+                let mut visitor = EnumVariantWritableVisitor { in_match: quote! {}, primitive, variant };
+                visit_enum_variants(&mut visitor, &input.ident, data_enum)?;
+                let in_match = visitor.in_match;
                 quote! {
-                    <#variant as #cp_crate::packet::PacketWritable>::write(
-                        &#variant::from(*self as #primitive), output
-                    ).await
+                    match self {
+                        #in_match
+                    }
+                    Ok(())
                 }
             }
-            false => {
+            None => {
                 let mut variants = TokenStream::new();
                 for variant in &data_enum.variants {
                     let enum_fields = EnumFields::build(&variant.fields)?;
-                    let mut writable_visitor = WritableVisitor::new(enum_fields.prefix());
+                    let mut writable_visitor = WritableVisitor::new(
+                        enum_fields.prefix(), false);
                     visit_fields(&variant.fields, &mut writable_visitor)?;
                     let variant_ident = &variant.ident;
                     let variant_arguments = enum_fields.arguments();
@@ -111,10 +168,10 @@ pub fn build_writable_function_body(input: &DeriveInput) -> syn::Result<TokenStr
                 match variants.is_empty() {
                     true => quote! { Ok(()) },
                     false => quote! {
-                    match self {
-                        #variants
-                    }
-                },
+                        match self {
+                            #variants
+                        }
+                    },
                 }
             }
         }
