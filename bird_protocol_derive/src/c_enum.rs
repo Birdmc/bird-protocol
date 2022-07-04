@@ -1,7 +1,7 @@
 use proc_macro2::{Ident, TokenStream};
 use quote::{quote, ToTokens};
 use syn::{DataEnum, Fields, Variant};
-use crate::attribute::{EnumFieldAttributes, FieldAttributes};
+use crate::attribute::EnumFieldAttributes;
 
 pub fn is_c_enum(data: &DataEnum) -> bool {
     data.variants

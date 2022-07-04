@@ -1,6 +1,6 @@
 [package]
 name = "bird-protocol"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 description = "Minecraft protocol on rust"
 license = "MIT"
@@ -15,7 +15,7 @@ async-recursion = "1.0.0"
 fastnbt = "2.1.0"
 quick-error = "2.0.1"
 uuid = { version = "1.0.0", features = ["serde"] }
-bird-protocol-derive = { path = "../bird_protocol_derive", version = "0.1.1", optional = true }
+bird-protocol-derive = { path = "../bird_protocol_derive", version = "0.1.2", optional = true }
 
 [features]
 derive = ["dep:bird-protocol-derive"]
