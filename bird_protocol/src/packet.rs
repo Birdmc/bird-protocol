@@ -1,118 +1,80 @@
-use quick_error::quick_error;
-
-quick_error! {
-    #[derive(Debug)]
-    pub enum CustomError {
-        Error(err: Box<dyn std::error::Error + Send + Sync>) {
-            display("{}", err)
-            from()
-            source(&**err)
-        }
-        String(message: String) {
-            display("{}", message)
-        }
-        StaticStr(message: &'static str) {
-            display("{}", message)
-        }
-    }
+#[derive(Debug, thiserror::Error)]
+pub enum PacketReadableError {
+    #[error("Bytes exceeded")]
+    BytesExceeded,
+    #[error("{0}")]
+    Any(#[from] anyhow::Error),
 }
 
-quick_error! {
-    #[derive(Debug)]
-    pub enum InputPacketBytesError {
-        NoBytes(length: usize) {
-            display("Length of the packet is {}", length)
-        }
-        Custom(err: CustomError) {
-            display("Input packet caused an error {}", err)
-            from()
-            source(err)
-        }
-    }
+pub trait PacketReadable<'a>: Sized {
+    fn read(read: &mut PacketRead<'a>) -> Result<Self, PacketReadableError>;
 }
 
-quick_error! {
-    #[derive(Debug)]
-    pub enum PacketReadableError {
-        InputPacketBytes(err: InputPacketBytesError) {
-            display("{}", err)
-            from()
-            source(err)
-        }
-        Custom(err: CustomError) {
-            display("Readable caused an error {}", err)
-            from()
-            source(err)
-        }
-    }
-}
-
-quick_error! {
-    #[derive(Debug)]
-    pub enum PacketWritableError {
-        Custom(err: CustomError) {
-            display("Writable caused an error {}", err)
-            from()
-            source(err)
-        }
-    }
-}
-
-pub type InputPacketBytesResult<T> = std::result::Result<T, InputPacketBytesError>;
-pub type OutputPacketBytesResult = std::result::Result<(), Box<dyn std::error::Error + Send + Sync>>;
-pub type PacketWritableResult = std::result::Result<(), PacketWritableError>;
-pub type PacketReadableResult<T> = std::result::Result<T, PacketReadableError>;
-
-#[async_trait::async_trait]
-pub trait InputPacketBytes: Send + Sync {
-    async fn take_byte(&mut self) -> InputPacketBytesResult<u8>;
-
-    async fn take_slice(&mut self, slice: &mut [u8]) -> InputPacketBytesResult<()>;
-
-    async fn take_vec(&mut self, vec: &mut Vec<u8>, count: usize) -> InputPacketBytesResult<()>;
-
-    fn has_bytes(&self, count: usize) -> bool;
-
-    fn remaining_bytes(&self) -> usize;
-}
-
-#[async_trait::async_trait]
-pub trait OutputPacketBytes: Send + Sync {
-    async fn write_byte(&mut self, byte: u8) -> OutputPacketBytesResult;
-
-    async fn write_bytes(&mut self, slice: &[u8]) -> OutputPacketBytesResult;
-}
-
-#[async_trait::async_trait]
 pub trait PacketWritable {
-    async fn write(&self, output: &mut impl OutputPacketBytes) -> PacketWritableResult;
+    fn write<W>(&self, write: &mut W) -> Result<(), anyhow::Error>
+        where W: std::io::Write;
 }
 
-#[async_trait::async_trait]
-pub trait PacketReadable: Sized {
-    async fn read(input: &mut impl InputPacketBytes) -> PacketReadableResult<Self>;
+pub struct PacketRead<'a> {
+    bytes: &'a [u8],
+    offset: usize,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum PacketState {
-    Handshake,
-    Status,
-    Login,
-    Play,
+impl<'a> PacketRead<'a> {
+    pub fn new(bytes: &'a [u8]) -> PacketRead {
+        PacketRead { bytes, offset: 0 }
+    }
+
+    pub fn take_byte(&mut self) -> Result<u8, PacketReadableError> {
+        match self.offset == self.bytes.len() {
+            true => Err(PacketReadableError::BytesExceeded),
+            false => {
+                let byte = *unsafe { self.bytes.get_unchecked(self.offset) };
+                self.offset += 1;
+                Ok(byte)
+            }
+        }
+    }
+
+    pub fn take_slice(&mut self, length: usize) -> Result<&'a [u8], PacketReadableError> {
+        match self.is_available(length) {
+            true => {
+                let previous_offset = self.offset;
+                self.offset += length;
+                Ok(&self.bytes[previous_offset..self.offset])
+            }
+            false => Err(PacketReadableError::BytesExceeded)
+        }
+    }
+
+    pub fn available(&self) -> usize {
+        // Panics. never offset is always less than length of bytes
+        self.bytes.len() - self.offset
+    }
+
+    pub fn is_available(&self, bytes: usize) -> bool {
+        self.available() >= bytes
+    }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum PacketSide {
-    Server,
-    Client,
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-pub trait Packet: PacketWritable + PacketReadable {
-    fn id() -> i32;
-
-    fn side() -> PacketSide;
-
-    fn state() -> PacketState;
-
-    fn protocol() -> i32;
+    #[test]
+    pub fn packet_read() {
+        let mut packet_read = PacketRead::new(&[0, 2, 3]);
+        assert_eq!(packet_read.available(), 3);
+        assert_eq!(packet_read.is_available(3), true);
+        assert_eq!(packet_read.is_available(0), true);
+        assert_eq!(packet_read.is_available(4), false);
+        assert_eq!(packet_read.take_byte().unwrap(), 0);
+        assert_eq!(packet_read.take_slice(2).unwrap(), &[2, 3]);
+        assert_eq!(packet_read.available(), 0);
+        assert_eq!(packet_read.is_available(1), false);
+        assert_eq!(match packet_read.take_byte().unwrap_err() {
+            PacketReadableError::BytesExceeded => true,
+            _ => false
+        }, true);
+    }
 }

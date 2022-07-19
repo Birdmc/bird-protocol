@@ -1,1 +1,0 @@
-Protocol server for [bird-protocol](https://github.com/Birdmc/bird-protocol)
