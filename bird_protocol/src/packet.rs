@@ -1,3 +1,5 @@
+use anyhow::Error;
+
 #[derive(Debug, thiserror::Error)]
 pub enum PacketReadableError {
     #[error("Bytes exceeded")]
@@ -10,9 +12,38 @@ pub trait PacketReadable<'a>: Sized {
     fn read(read: &mut PacketRead<'a>) -> Result<Self, PacketReadableError>;
 }
 
+pub trait PacketVariantReadable<'a, T: Sized> {
+    fn read_variant(read: &mut PacketRead<'a>) -> Result<T, PacketReadableError>;
+}
+
 pub trait PacketWritable {
-    fn write<W>(&self, write: &mut W) -> Result<(), anyhow::Error>
-        where W: std::io::Write;
+    fn write<W>(&self, write: &mut W) -> Result<(), anyhow::Error> where W: PacketWrite;
+}
+
+pub trait PacketVariantWritable<T> {
+    fn write_variant<W>(object: &T, write: &mut W) -> Result<(), anyhow::Error> where W: PacketWrite;
+}
+
+impl<'a, T: PacketReadable<'a>> PacketVariantReadable<'a, T> for T {
+    fn read_variant(read: &mut PacketRead<'a>) -> Result<T, PacketReadableError> {
+        T::read(read)
+    }
+}
+
+impl<T: PacketWritable> PacketVariantWritable<T> for T {
+    fn write_variant<W>(object: &T, write: &mut W) -> Result<(), Error> where W: PacketWrite {
+        object.write(write)
+    }
+}
+
+pub trait PacketWrite {
+    fn write_byte(&mut self, byte: u8) -> Result<(), anyhow::Error>;
+
+    fn write_bytes(&mut self, bytes: &[u8]) -> Result<(), anyhow::Error>;
+
+    fn write_bytes_owned(&mut self, bytes: Vec<u8>) -> Result<(), anyhow::Error>;
+
+    fn write_bytes_fixed<const SIZE: usize>(&mut self, bytes: [u8; SIZE]) -> Result<(), anyhow::Error>;
 }
 
 pub struct PacketRead<'a> {
@@ -29,6 +60,8 @@ impl<'a> PacketRead<'a> {
         match self.offset == self.bytes.len() {
             true => Err(PacketReadableError::BytesExceeded),
             false => {
+                // Safety. offset is always less than bytes length and we already checked
+                // that bytes length and offset is not equal. So offset is less and we can get by offset index
                 let byte = *unsafe { self.bytes.get_unchecked(self.offset) };
                 self.offset += 1;
                 Ok(byte)
@@ -47,12 +80,12 @@ impl<'a> PacketRead<'a> {
         }
     }
 
-    pub fn available(&self) -> usize {
+    pub const fn available(&self) -> usize {
         // Panics. never offset is always less than length of bytes
         self.bytes.len() - self.offset
     }
 
-    pub fn is_available(&self, bytes: usize) -> bool {
+    pub const fn is_available(&self, bytes: usize) -> bool {
         self.available() >= bytes
     }
 }
