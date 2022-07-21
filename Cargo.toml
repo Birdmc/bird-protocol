@@ -1,7 +1,5 @@
 [workspace]
 members = [
-    "bird_protocol_server",
-    "bird_protocol_derive",
     "bird_protocol",
 ]
 
