@@ -7,17 +7,60 @@ pub struct VarInt;
 
 pub struct VarLong;
 
-pub struct RemainingSlice;
+pub trait ProtocolArray {}
+
+pub struct RemainingSlice<
+    Value,
+    ValueInner = Value,
+>(
+    PhantomData<Value>, PhantomData<ValueInner>,
+);
 
 pub struct RemainingBytesSlice;
 
-pub struct RemainingRawSlice;
+pub struct LengthProvidedSlice<
+    Length,
+    Value,
+    LengthInner: PacketLength = Length,
+    ValueInner = Value
+>(
+    PhantomData<Length>, PhantomData<LengthInner>, PhantomData<Value>, PhantomData<ValueInner>,
+);
 
-pub struct LengthProvidedSlice<L: PacketLength>(PhantomData<L>);
+pub struct LengthProvidedBytesSlice<
+    Length,
+    LengthInner: PacketLength = Length
+>(
+    PhantomData<Length>,
+    PhantomData<LengthInner>,
+);
 
-pub struct LengthProvidedBytesSlice<L: PacketLength>(PhantomData<L>);
+pub struct ProtocolJson;
 
-pub struct LengthProvidedRawSlice<L: PacketLength>(PhantomData<L>);
+pub struct ProtocolNbt;
+
+pub struct BlockPosition;
+
+pub struct Angle;
+
+impl ProtocolArray for RemainingBytesSlice {}
+
+impl<
+    Value,
+    ValueInner
+> ProtocolArray for RemainingSlice<Value, ValueInner> {}
+
+impl<
+    Length,
+    Value,
+    LengthInner: PacketLength,
+    ValueInner
+> ProtocolArray for LengthProvidedSlice<Length, Value, LengthInner, ValueInner> {}
+
+impl<
+    Length,
+    LengthInner: PacketLength
+> ProtocolArray for LengthProvidedBytesSlice<Length, LengthInner> {}
 
 impl PacketReadable<'_> for u8 {
     fn read(read: &mut PacketRead<'_>) -> Result<Self, PacketReadableError> {
@@ -59,22 +102,26 @@ impl PacketWritable for bool {
 }
 
 fn read_str_with_limit<'a>(read: &mut PacketRead<'a>, limit: i32) -> Result<&'a str, PacketReadableError> {
+    let slice = read_bytes_with_limit(read, limit)?;
+    std::str::from_utf8(slice).map_err(|err| PacketReadableError::Any(err.into()))
+}
+
+fn read_bytes_with_limit<'a>(read: &mut PacketRead<'a>, limit: i32) -> Result<&'a [u8], PacketReadableError> {
     let length = VarInt::read_variant(read)?;
     match length > limit {
         true => Err(PacketReadableError::Any(anyhow::Error::msg("Too big string"))),
         false => {
-            let slice = read.take_slice(length as usize)?;
-            std::str::from_utf8(slice).map_err(|err| PacketReadableError::Any(err.into()))
+            Ok(read.take_slice(length as usize)?)
         }
     }
 }
 
-const STRING_LIMIT: i32 = 32767;
+const DEFAULT_LIMIT: i32 = 32767;
 const CHAT_LIMIT: i32 = 262144;
 
 impl<'a> PacketReadable<'a> for &'a str {
     fn read(read: &mut PacketRead<'a>) -> Result<Self, PacketReadableError> {
-        read_str_with_limit(read, STRING_LIMIT)
+        read_str_with_limit(read, DEFAULT_LIMIT)
     }
 }
 
@@ -92,7 +139,9 @@ impl<'a> PacketReadable<'a> for Cow<'a, str> {
 
 impl PacketWritable for &str {
     fn write<W>(&self, write: &mut W) -> Result<(), Error> where W: PacketWrite {
-        write.write_bytes(self.as_bytes())
+        let bytes = self.as_bytes();
+        VarInt::write_variant(&(bytes.len() as i32), write)?;
+        write.write_bytes(bytes)
     }
 }
 
@@ -111,22 +160,28 @@ impl PacketWritable for Cow<'_, str> {
     }
 }
 
-impl<'a, V: 'a + Clone, T: PacketVariantReadable<'a, &'a [V]>> PacketVariantReadable<'a, Vec<V>> for T {
+impl<'a, V: 'a + Clone, T: PacketVariantReadable<'a, &'a [V]> + ProtocolArray> PacketVariantReadable<'a, Vec<V>> for T {
     fn read_variant(read: &mut PacketRead<'a>) -> Result<Vec<V>, PacketReadableError> {
         Ok(T::read_variant(read)?.to_vec())
     }
 }
 
-impl<'a, V: 'a + Clone, T: PacketVariantReadable<'a, &'a [V]> + Sized> PacketVariantReadable<'a, Cow<'a, [V]>> for T {
+impl<'a, V: 'a + Clone, T: PacketVariantReadable<'a, &'a [V]> + ProtocolArray> PacketVariantReadable<'a, Cow<'a, [V]>> for T {
     fn read_variant(read: &mut PacketRead<'a>) -> Result<Cow<'a, [V]>, PacketReadableError> {
         Ok(Cow::Borrowed(T::read_variant(read)?))
     }
 }
 
-impl<'a, V: 'a + Clone, T: PacketVariantWritable<&'a [V]> + PacketVariantWritable<Vec<V>>> PacketVariantWritable<Cow<'a, [V]>> for T {
-    fn write_variant<W>(object: &Cow<'a, [V]>, write: &mut W) -> Result<(), Error> where W: PacketWrite {
+impl<V, T: PacketVariantWritable<[V]> + ProtocolArray> PacketVariantWritable<Vec<V>> for T {
+    fn write_variant<W>(object: &Vec<V>, write: &mut W) -> Result<(), Error> where W: PacketWrite {
+        T::write_variant(object.as_slice(), write)
+    }
+}
+
+impl<V: Clone, T: PacketVariantWritable<[V]> + ProtocolArray> PacketVariantWritable<Cow<'_, [V]>> for T {
+    fn write_variant<W>(object: &Cow<'_, [V]>, write: &mut W) -> Result<(), Error> where W: PacketWrite {
         match object {
-            Cow::Owned(ref owned) => T::write_variant(owned, write),
+            Cow::Owned(ref owned) => T::write_variant(owned.as_slice(), write),
             Cow::Borrowed(ref borrowed) => T::write_variant(borrowed, write),
         }
     }
@@ -150,61 +205,29 @@ impl PacketVariantWritable<Vec<u8>> for RemainingBytesSlice {
     }
 }
 
-impl<'a, T: PacketReadable<'a>> PacketVariantReadable<'a, Vec<T>> for RemainingSlice {
-    fn read_variant(read: &mut PacketRead<'a>) -> Result<Vec<T>, PacketReadableError> {
+impl<
+    'a,
+    Value: PacketVariantReadable<'a, ValueInner>,
+    ValueInner: 'a
+> PacketVariantReadable<'a, Vec<ValueInner>> for RemainingSlice<Value, ValueInner> {
+    fn read_variant(read: &mut PacketRead<'a>) -> Result<Vec<ValueInner>, PacketReadableError> {
         let mut result = Vec::new();
         while read.available() != 0 {
-            result.push(T::read(read)?);
+            result.push(Value::read_variant(read)?);
         }
         Ok(result)
     }
 }
 
-impl<T: PacketWritable> PacketVariantWritable<&[T]> for RemainingSlice {
-    fn write_variant<W>(object: &&[T], write: &mut W) -> Result<(), Error> where W: PacketWrite {
-        for element in *object {
-            element.write(write)?
+impl<
+    Value: PacketVariantWritable<ValueInner>,
+    ValueInner
+> PacketVariantWritable<[ValueInner]> for RemainingSlice<Value, ValueInner> {
+    fn write_variant<W>(object: &[ValueInner], write: &mut W) -> Result<(), Error> where W: PacketWrite {
+        for element in object {
+            Value::write_variant(element, write)?
         }
         Ok(())
-    }
-}
-
-impl<T: PacketWritable> PacketVariantWritable<Vec<T>> for RemainingSlice {
-    fn write_variant<W>(object: &Vec<T>, write: &mut W) -> Result<(), Error> where W: PacketWrite {
-        Self::write_variant(&object.as_slice(), write)
-    }
-}
-
-// TODO think to move it to the unsafe function, because it is actually unsafe or implement it for specific types to make it safe
-// Unsafe: if T type contains pointer types (Functions, Pointers, References, etc)
-impl<'a, T: Copy + Sized> PacketVariantReadable<'a, &'a [T]> for RemainingRawSlice {
-    fn read_variant(read: &mut PacketRead<'a>) -> Result<&'a [T], PacketReadableError> {
-        let remaining_slice: &[u8] = RemainingBytesSlice::read_variant(read)?;
-        match remaining_slice.len() % std::mem::size_of::<T>() == 0 {
-            true => unsafe {
-                Ok(std::slice::from_raw_parts(
-                    remaining_slice.as_ptr() as *const T, remaining_slice.len(),
-                ))
-            },
-            false => Err(PacketReadableError::Any(Error::msg("Remaining slice length is not match")))
-        }
-    }
-}
-
-impl<T: Copy + Sized> PacketVariantWritable<&[T]> for RemainingRawSlice {
-    fn write_variant<W>(object: &&[T], write: &mut W) -> Result<(), Error> where W: PacketWrite {
-        write.write_bytes(unsafe {
-            std::slice::from_raw_parts(
-                object.as_ptr() as *const u8,
-                std::mem::size_of::<T>() * object.len(),
-            )
-        })
-    }
-}
-
-impl<T: Copy + Sized> PacketVariantWritable<Vec<T>> for RemainingRawSlice {
-    fn write_variant<W>(object: &Vec<T>, write: &mut W) -> Result<(), Error> where W: PacketWrite {
-        Self::write_variant(&object.as_slice(), write)
     }
 }
 
@@ -214,92 +237,71 @@ pub trait PacketLength {
     fn from_length(length: usize) -> Self;
 }
 
-impl<'a, L: PacketLength + PacketReadable<'a>> PacketVariantReadable<'a, &'a [u8]> for LengthProvidedBytesSlice<L> {
+impl<
+    'a,
+    Length: PacketVariantReadable<'a, LengthInner>,
+    LengthInner: PacketLength
+> PacketVariantReadable<'a, &'a [u8]> for LengthProvidedBytesSlice<Length, LengthInner> {
     fn read_variant(read: &mut PacketRead<'a>) -> Result<&'a [u8], PacketReadableError> {
-        let length = L::read(read)?.into_length();
+        let length = Length::read_variant(read)?.into_length();
         read.take_slice(length)
     }
 }
 
-impl<L: PacketLength + PacketWritable> PacketVariantWritable<&[u8]> for LengthProvidedBytesSlice<L> {
-    fn write_variant<W>(object: &&[u8], write: &mut W) -> Result<(), Error> where W: PacketWrite {
-        L::from_length(object.len()).write(write)?;
+impl<
+    Length: PacketVariantWritable<LengthInner>,
+    LengthInner: PacketLength
+> PacketVariantWritable<[u8]> for LengthProvidedBytesSlice<Length, LengthInner> {
+    fn write_variant<W>(object: &[u8], write: &mut W) -> Result<(), Error> where W: PacketWrite {
+        Length::write_variant(&LengthInner::from_length(object.len()), write)?;
         write.write_bytes(object)
     }
 }
 
-impl<L: PacketLength + PacketWritable> PacketVariantWritable<Vec<u8>> for LengthProvidedBytesSlice<L> {
-    fn write_variant<W>(object: &Vec<u8>, write: &mut W) -> Result<(), Error> where W: PacketWrite {
-        Self::write_variant(&object.as_slice(), write)
-    }
-}
-
-impl<'a, L: PacketLength + PacketReadable<'a>, T: PacketReadable<'a>>
-PacketVariantReadable<'a, Vec<T>> for LengthProvidedSlice<L> {
-    fn read_variant(read: &mut PacketRead<'a>) -> Result<Vec<T>, PacketReadableError> {
-        let length = L::read(read)?.into_length();
+impl<
+    'a,
+    Length: PacketVariantReadable<'a, LengthInner>,
+    Value: PacketVariantReadable<'a, ValueInner>,
+    LengthInner: PacketLength,
+    ValueInner: 'a
+> PacketVariantReadable<'a, Vec<ValueInner>> for LengthProvidedSlice<Length, Value, LengthInner, ValueInner> {
+    fn read_variant(read: &mut PacketRead<'a>) -> Result<Vec<ValueInner>, PacketReadableError> {
+        let length = Length::read_variant(read)?.into_length();
         let mut result = Vec::with_capacity(length);
         for _ in 0..length {
-            result.push(T::read(read)?);
+            result.push(Value::read_variant(read)?);
         }
         Ok(result)
     }
 }
 
-impl<L: PacketLength + PacketWritable, T: PacketWritable>
-PacketVariantWritable<&[T]> for LengthProvidedSlice<L> {
-    fn write_variant<W>(object: &&[T], write: &mut W) -> Result<(), Error> where W: PacketWrite {
-        L::from_length(object.len()).write(write)?;
-        for element in *object {
-            element.write(write)?
+impl<
+    Length: PacketVariantWritable<LengthInner>,
+    Value: PacketVariantWritable<ValueInner>,
+    LengthInner: PacketLength,
+    ValueInner
+> PacketVariantWritable<[ValueInner]> for LengthProvidedSlice<Length, Value, LengthInner, ValueInner> {
+    fn write_variant<W>(object: &[ValueInner], write: &mut W) -> Result<(), Error> where W: PacketWrite {
+        Length::write_variant(&LengthInner::from_length(object.len()), write)?;
+        for element in object {
+            Value::write_variant(element, write)?
         }
         Ok(())
     }
 }
 
-impl<L: PacketLength + PacketWritable, T: PacketWritable>
-PacketVariantWritable<Vec<T>> for LengthProvidedSlice<L> {
-    fn write_variant<W>(object: &Vec<T>, write: &mut W) -> Result<(), Error> where W: PacketWrite {
-        Self::write_variant(&object.as_slice(), write)
+impl<'a, T: 'a + serde::Deserialize<'a>> PacketVariantReadable<'a, T> for ProtocolJson {
+    fn read_variant(read: &mut PacketRead<'a>) -> Result<T, PacketReadableError> {
+        let slice = read_bytes_with_limit(read, DEFAULT_LIMIT)?;
+        serde_json::from_slice(slice).map_err(|err| PacketReadableError::Any(err.into()))
     }
 }
 
-// TODO same as RemainingRawSlice
-impl<'a, L: PacketLength + PacketReadable<'a>, T: Clone + Sized>
-PacketVariantReadable<'a, &'a [T]> for LengthProvidedRawSlice<L> {
-    fn read_variant(read: &mut PacketRead<'a>) -> Result<&'a [T], PacketReadableError> {
-        let length = L::read(read)?.into_length();
-        // TODO should we check for panic situations?
-        match usize::MAX / std::mem::size_of::<T>() < length {
-            true => Err(PacketReadableError::Any(Error::msg("Too big slice"))),
-            false => {
-                let length = length * std::mem::size_of::<T>();
-                let slice = read.take_slice(length)?;
-                Ok(unsafe {
-                    std::slice::from_raw_parts(slice.as_ptr() as *const T, length)
-                })
-            }
-        }
-    }
-}
-
-impl<L: PacketLength + PacketWritable, T: Clone + Sized>
-PacketVariantWritable<&[T]> for LengthProvidedRawSlice<L> {
-    fn write_variant<W>(object: &&[T], write: &mut W) -> Result<(), Error> where W: PacketWrite {
-        L::from_length(object.len()).write(write)?;
-        write.write_bytes(unsafe {
-            std::slice::from_raw_parts(
-                object.as_ptr() as *const u8,
-                object.len() * std::mem::size_of::<T>(),
-            )
-        })
-    }
-}
-
-impl<L: PacketLength + PacketWritable, T: Clone + Sized>
-PacketVariantWritable<Vec<T>> for LengthProvidedRawSlice<L> {
-    fn write_variant<W>(object: &Vec<T>, write: &mut W) -> Result<(), Error> where W: PacketWrite {
-        Self::write_variant(&object.as_slice(), write)
+impl<T: serde::Serialize> PacketVariantWritable<T> for ProtocolJson {
+    fn write_variant<W>(object: &T, write: &mut W) -> Result<(), Error> where W: PacketWrite {
+        LengthProvidedBytesSlice::<VarInt, i32>::write_variant(
+            &serde_json::to_vec(object)?, write,
+        )
     }
 }
 
@@ -319,8 +321,6 @@ macro_rules! length_impl {
         $(length_impl!($num);)*
     }
 }
-
-length_impl!(u8 i8 u16 i16 u32 i32 u64 i64);
 
 macro_rules! number_impl {
     ($num: ident) => {
@@ -349,7 +349,6 @@ macro_rules! number_impl {
 
 macro_rules! var_number_impl {
     ($var_num: ident, $num: ident, $unsigned_num: ident) => {
-
         impl PacketVariantReadable<'_, $num> for $var_num {
             fn read_variant(read: &mut PacketRead<'_>) -> Result<$num, PacketReadableError> {
                 let mut value: $num = 0;
@@ -357,11 +356,11 @@ macro_rules! var_number_impl {
                 loop {
                     let byte = read.take_byte()?;
                     value |= ((byte & 0x7F) << position) as $num;
-                    if ((byte & 0x80) == 0) {
+                    if (byte & 0x80) == 0 {
                         break Ok(value)
                     }
                     position += 7;
-                    if (position >= (std::mem::size_of::<$num>() * 8) as u8) {
+                    if position >= (std::mem::size_of::<$num>() * 8) as u8 {
                         break Err(PacketReadableError::Any(anyhow::Error::msg("Var number is too long")))
                     }
                 }
@@ -372,7 +371,7 @@ macro_rules! var_number_impl {
             fn write_variant<W>(object: & $num, write: &mut W) -> Result<(), Error> where W: PacketWrite {
                 let mut value: $unsigned_num = *object as $unsigned_num;
                 loop {
-                    if ((value & !0x7F) == 0) {
+                    if (value & !0x7F) == 0 {
                         write.write_byte((value as u8))?;
                         break;
                     }
@@ -386,5 +385,7 @@ macro_rules! var_number_impl {
     }
 }
 
+length_impl!(u8 i8 u16 i16 u32 i32 u64 i64);
 number_impl!(u16 i16 u32 i32 u64 i64 u128 i128);
 var_number_impl!(VarInt, i32, u32);
+var_number_impl!(VarLong, i64, u64);

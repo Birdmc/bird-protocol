@@ -8,5 +8,7 @@ edition = "2021"
 [dependencies]
 thiserror = "1.0.31"
 anyhow = "1.0.58"
+serde = "1.0.139"
+serde_json = "1.0.82"
 
 [features]

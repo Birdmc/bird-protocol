@@ -20,7 +20,7 @@ pub trait PacketWritable {
     fn write<W>(&self, write: &mut W) -> Result<(), anyhow::Error> where W: PacketWrite;
 }
 
-pub trait PacketVariantWritable<T> {
+pub trait PacketVariantWritable<T: ?Sized> {
     fn write_variant<W>(object: &T, write: &mut W) -> Result<(), anyhow::Error> where W: PacketWrite;
 }
 
@@ -87,6 +87,29 @@ impl<'a> PacketRead<'a> {
 
     pub const fn is_available(&self, bytes: usize) -> bool {
         self.available() >= bytes
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct VecPacketWrite {
+    pub vec: Vec<u8>
+}
+
+impl PacketWrite for VecPacketWrite {
+    fn write_byte(&mut self, byte: u8) -> Result<(), Error> {
+        Ok(self.vec.push(byte))
+    }
+
+    fn write_bytes(&mut self, bytes: &[u8]) -> Result<(), Error> {
+        Ok(self.vec.extend_from_slice(bytes))
+    }
+
+    fn write_bytes_owned(&mut self, bytes: Vec<u8>) -> Result<(), Error> {
+        self.write_bytes(bytes.as_slice())
+    }
+
+    fn write_bytes_fixed<const SIZE: usize>(&mut self, bytes: [u8; SIZE]) -> Result<(), Error> {
+        self.write_bytes(bytes.as_slice())
     }
 }
 

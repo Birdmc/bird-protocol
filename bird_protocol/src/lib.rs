@@ -3,3 +3,6 @@
 
 pub mod packet;
 pub mod packet_types;
+
+#[cfg(test)]
+mod tests;
