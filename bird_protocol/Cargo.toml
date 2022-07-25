@@ -10,5 +10,12 @@ thiserror = "1.0.31"
 anyhow = "1.0.58"
 serde = "1.0.139"
 serde_json = "1.0.82"
+bird-chat = "0.1.2"
+fastnbt = { version = "2.2.0", optional = true }
+euclid = { version = "0.22.7", optional = true }
+bytes = { version = "1.2.0", optional = true }
 
 [features]
+euclid = ["dep:euclid"]
+tokio-bytes = ["dep:bytes"]
+fastnbt = ["dep:fastnbt"]

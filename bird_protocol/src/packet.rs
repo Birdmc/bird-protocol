@@ -9,11 +9,11 @@ pub enum PacketReadableError {
 }
 
 pub trait PacketReadable<'a>: Sized {
-    fn read(read: &mut PacketRead<'a>) -> Result<Self, PacketReadableError>;
+    fn read<R>(read: &mut R) -> Result<Self, PacketReadableError> where R: PacketRead<'a>;
 }
 
 pub trait PacketVariantReadable<'a, T: Sized> {
-    fn read_variant(read: &mut PacketRead<'a>) -> Result<T, PacketReadableError>;
+    fn read_variant<R>(read: &mut R) -> Result<T, PacketReadableError> where R: PacketRead<'a>;
 }
 
 pub trait PacketWritable {
@@ -25,7 +25,7 @@ pub trait PacketVariantWritable<T: ?Sized> {
 }
 
 impl<'a, T: PacketReadable<'a>> PacketVariantReadable<'a, T> for T {
-    fn read_variant(read: &mut PacketRead<'a>) -> Result<T, PacketReadableError> {
+    fn read_variant<R>(read: &mut R) -> Result<T, PacketReadableError> where R: PacketRead<'a> {
         T::read(read)
     }
 }
@@ -46,17 +46,31 @@ pub trait PacketWrite {
     fn write_bytes_fixed<const SIZE: usize>(&mut self, bytes: [u8; SIZE]) -> Result<(), anyhow::Error>;
 }
 
-pub struct PacketRead<'a> {
+pub trait PacketRead<'a> {
+    fn take_byte(&mut self) -> Result<u8, PacketReadableError>;
+
+    fn take_slice(&mut self, length: usize) -> Result<&'a [u8], PacketReadableError>;
+
+    fn rollback(&mut self, length: usize) -> Result<(), anyhow::Error>;
+
+    fn available(&self) -> usize;
+
+    fn is_available(&self, bytes: usize) -> bool;
+}
+
+pub struct SlicePacketRead<'a> {
     bytes: &'a [u8],
     offset: usize,
 }
 
-impl<'a> PacketRead<'a> {
-    pub fn new(bytes: &'a [u8]) -> PacketRead {
-        PacketRead { bytes, offset: 0 }
+impl<'a> SlicePacketRead<'a> {
+    pub fn new(bytes: &'a [u8]) -> Self {
+        SlicePacketRead { bytes, offset: 0 }
     }
+}
 
-    pub fn take_byte(&mut self) -> Result<u8, PacketReadableError> {
+impl<'a> PacketRead<'a> for SlicePacketRead<'a> {
+    fn take_byte(&mut self) -> Result<u8, PacketReadableError> {
         match self.offset == self.bytes.len() {
             true => Err(PacketReadableError::BytesExceeded),
             false => {
@@ -69,7 +83,7 @@ impl<'a> PacketRead<'a> {
         }
     }
 
-    pub fn take_slice(&mut self, length: usize) -> Result<&'a [u8], PacketReadableError> {
+    fn take_slice(&mut self, length: usize) -> Result<&'a [u8], PacketReadableError> {
         match self.is_available(length) {
             true => {
                 let previous_offset = self.offset;
@@ -80,28 +94,33 @@ impl<'a> PacketRead<'a> {
         }
     }
 
-    pub const fn available(&self) -> usize {
+    fn rollback(&mut self, length: usize) -> Result<(), Error> {
+        match self.offset < length {
+            true => Err(Error::msg("Can not rollback")),
+            false => {
+                self.offset -= length;
+                Ok(())
+            }
+        }
+    }
+
+    fn available(&self) -> usize {
         // Panics. never offset is always less than length of bytes
         self.bytes.len() - self.offset
     }
 
-    pub const fn is_available(&self, bytes: usize) -> bool {
+    fn is_available(&self, bytes: usize) -> bool {
         self.available() >= bytes
     }
 }
 
-#[derive(Debug, Default)]
-pub struct VecPacketWrite {
-    pub vec: Vec<u8>
-}
-
-impl PacketWrite for VecPacketWrite {
+impl PacketWrite for Vec<u8> {
     fn write_byte(&mut self, byte: u8) -> Result<(), Error> {
-        Ok(self.vec.push(byte))
+        Ok(self.push(byte))
     }
 
     fn write_bytes(&mut self, bytes: &[u8]) -> Result<(), Error> {
-        Ok(self.vec.extend_from_slice(bytes))
+        Ok(self.extend_from_slice(bytes))
     }
 
     fn write_bytes_owned(&mut self, bytes: Vec<u8>) -> Result<(), Error> {
