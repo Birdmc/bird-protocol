@@ -439,7 +439,7 @@ macro_rules! var_number_impl {
                 let mut position: u8 = 0;
                 loop {
                     let byte = read.take_byte()?;
-                    value |= ((byte & 0x7F) << position) as $num;
+                    value |= ((byte & 0x7F) as $num) << position;
                     if (byte & 0x80) == 0 {
                         break Ok(value)
                     }

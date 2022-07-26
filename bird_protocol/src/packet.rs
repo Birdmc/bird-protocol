@@ -59,7 +59,7 @@ pub trait PacketRead<'a> {
 }
 
 pub struct SlicePacketRead<'a> {
-    bytes: &'a [u8],
+    pub bytes: &'a [u8],
     offset: usize,
 }
 
@@ -138,7 +138,7 @@ mod tests {
 
     #[test]
     pub fn packet_read() {
-        let mut packet_read = PacketRead::new(&[0, 2, 3]);
+        let mut packet_read = SlicePacketRead::new(&[0, 2, 3]);
         assert_eq!(packet_read.available(), 3);
         assert_eq!(packet_read.is_available(3), true);
         assert_eq!(packet_read.is_available(0), true);

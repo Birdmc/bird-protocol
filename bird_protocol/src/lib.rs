@@ -12,3 +12,5 @@ pub mod packet_fastnbt;
 #[cfg(test)]
 mod tests;
 
+pub use crate::packet::*;
+pub use crate::packet_types::*;
