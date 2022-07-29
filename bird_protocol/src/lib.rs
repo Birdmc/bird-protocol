@@ -1,6 +1,8 @@
 #![feature(const_trait_impl)]
 #![feature(associated_type_bounds)]
 
+extern crate anyhow;
+
 pub mod packet;
 pub mod packet_types;
 #[cfg(feature = "euclid")]
