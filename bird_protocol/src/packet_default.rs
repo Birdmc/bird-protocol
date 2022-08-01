@@ -1,7 +1,6 @@
-use std::borrow::Cow;
 use crate::*;
 
-#[derive(PacketWritable)]
+#[derive(PacketWritable, PacketReadable)]
 pub struct HandshakePacket<'a> {
     #[variant(VarInt)]
     pub protocol_version: i32,

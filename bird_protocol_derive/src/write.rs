@@ -1,7 +1,7 @@
-use proc_macro2::{Ident, Span, TokenStream};
-use quote::{quote, ToTokens};
-use syn::{Data, DeriveInput, Field, Fields, Path};
-use crate::util::{add_trait_bounds, DataAttributes, FieldAttributes, FieldVisitor, get_bird_protocol_crate, get_lifetimes, VariantVisitor, visit_derive_input, visit_fields};
+use proc_macro2::{Ident, TokenStream};
+use quote::quote;
+use syn::{DeriveInput, Field, Fields, Path};
+use crate::util::{FieldAttributes, FieldVisitor, get_bird_protocol_crate, VariantAttributes, VariantVisitor, visit_derive_input, visit_fields};
 
 pub struct WritableVariantVisitor {
     variants: TokenStream,
@@ -24,13 +24,13 @@ impl WritableVariantVisitor {
         let Self { variants, .. } = self;
         quote! {
             #variants
-            _ => std::result::Result::Err(anyhow::Error::msg("Bad write variant")),
+            _ => unreachable!(),
         }
     }
 }
 
 impl VariantVisitor for WritableVariantVisitor {
-    fn visit(&mut self, ident: Path, data_fields: &Fields, _attributes: DataAttributes) -> syn::Result<()> {
+    fn visit(&mut self, ident: Path, data_fields: &Fields, _attributes: VariantAttributes) -> syn::Result<()> {
         let Self { variants, .. } = self;
         let mut field_visitor = WritableFieldVisitor::new();
         visit_fields(data_fields, &mut field_visitor)?;
@@ -102,7 +102,7 @@ pub fn write_impl(args: &DeriveInput) -> syn::Result<TokenStream> {
     visit_derive_input(args, &mut visitor)?;
     let DeriveInput { ident, generics, .. } = args;
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
-    let WritableVariantVisitor { variants, .. } = visitor;
+    let variants = visitor.get_variants();
     Ok(quote! {
         impl #impl_generics #protocol_crate ::packet::PacketWritable for #ident #ty_generics #where_clause {
             fn write<W>(&self, write: &mut W) -> Result<(), anyhow::Error>

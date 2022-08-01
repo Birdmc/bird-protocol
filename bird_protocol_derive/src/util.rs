@@ -2,13 +2,14 @@ use std::collections::HashMap;
 use proc_macro2::{Ident, Span, TokenStream};
 use proc_macro_crate::{crate_name, FoundCrate};
 use quote::{quote, ToTokens};
-use syn::{Attribute, Data, DataEnum, DataStruct, DeriveInput, Expr, Field, Fields, GenericParam, Generics, LifetimeDef, Lit, parse_quote, Path, PathArguments, PathSegment, Token};
+use syn::{Attribute, Data, DataEnum, DataStruct, DeriveInput, Expr, Field, Fields, GenericParam, Generics, LifetimeDef, Lit, Path, PathArguments, PathSegment};
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
-use syn::token::{Colon2, Type};
+use syn::token::Colon2;
 
-const FIELD_ATTRIBUTES: &[&str] = &["variant", "var", "order"];
-const DATA_ATTRIBUTES: &[&str] = &[];
+pub const FIELD_ATTRIBUTES: &[&str] = &["variant", "var", "order"];
+pub const DATA_ATTRIBUTES: &[&str] = &["lifetime"];
+pub const VARIANT_ATTRIBUTES: &[&str] = &[];
 
 #[derive(Debug, Clone)]
 pub struct FieldAttributes {
@@ -17,14 +18,21 @@ pub struct FieldAttributes {
 }
 
 #[derive(Debug, Clone)]
-pub struct DataAttributes {}
+pub struct DataAttributes {
+    pub lead_lifetime: Option<TokenStream>,
+}
+
+#[derive(Debug, Clone)]
+pub struct VariantAttributes {
+    pub value: Option<TokenStream>,
+}
 
 pub trait FieldVisitor {
     fn visit(&mut self, ident: Ident, field: &Field, attributes: FieldAttributes) -> syn::Result<()>;
 }
 
 pub trait VariantVisitor {
-    fn visit(&mut self, ident: Path, fields: &Fields, attributes: DataAttributes) -> syn::Result<()>;
+    fn visit(&mut self, ident: Path, fields: &Fields, attributes: VariantAttributes) -> syn::Result<()>;
 }
 
 pub fn visit_fields(fields: &Fields, visitor: &mut impl FieldVisitor) -> syn::Result<()> {
@@ -40,7 +48,7 @@ pub fn visit_fields(fields: &Fields, visitor: &mut impl FieldVisitor) -> syn::Re
             let mut counter = 0usize;
             for field in &unnamed.unnamed {
                 visitor.visit(
-                    Ident::new(counter.to_string().as_str(), field.span()),
+                    Ident::new(format!("__{}", counter).as_str(), field.span()),
                     field,
                     get_attributes(FIELD_ATTRIBUTES, &field.attrs)?.try_into()?,
                 )?;
@@ -91,7 +99,7 @@ pub fn visit_enum(
                 },
             },
             &variant.fields,
-            get_attributes(DATA_ATTRIBUTES, attributes)?.try_into()?,
+            get_attributes(VARIANT_ATTRIBUTES, attributes)?.try_into()?,
         )?
     }
     Ok(())
@@ -120,7 +128,7 @@ pub fn visit_struct(
     )
 }
 
-fn get_attributes<'a>(names: &[&'a str], attributes: &Vec<Attribute>) -> syn::Result<HashMap<&'a str, Expr>> {
+pub fn get_attributes<'a>(names: &[&'a str], attributes: &Vec<Attribute>) -> syn::Result<HashMap<&'a str, Expr>> {
     let mut res = HashMap::new();
     for attribute in attributes {
         for name in names {
@@ -133,7 +141,7 @@ fn get_attributes<'a>(names: &[&'a str], attributes: &Vec<Attribute>) -> syn::Re
     Ok(res)
 }
 
-fn expr_to_usize(expr: &Expr) -> syn::Result<usize> {
+pub fn expr_to_usize(expr: &Expr) -> syn::Result<usize> {
     if let Expr::Lit(ref lit) = expr {
         if let Lit::Int(ref int) = lit.lit {
             return int.base10_parse();
@@ -161,8 +169,22 @@ impl TryFrom<HashMap<&str, Expr>> for FieldAttributes {
 impl TryFrom<HashMap<&str, Expr>> for DataAttributes {
     type Error = syn::Error;
 
-    fn try_from(_: HashMap<&str, Expr>) -> Result<Self, Self::Error> {
-        Ok(DataAttributes {})
+    fn try_from(value: HashMap<&str, Expr>) -> Result<Self, Self::Error> {
+        Ok(DataAttributes {
+            lead_lifetime: value.get("lifetime")
+                .map(|expr| expr.to_token_stream())
+        })
+    }
+}
+
+impl TryFrom<HashMap<&str, Expr>> for VariantAttributes {
+    type Error = syn::Error;
+
+    fn try_from(attrs: HashMap<&str, Expr>) -> Result<Self, Self::Error> {
+        Ok(VariantAttributes {
+            value: attrs.get("value")
+                .map(|expr| expr.to_token_stream())
+        })
     }
 }
 
@@ -175,17 +197,6 @@ pub fn get_bird_protocol_crate() -> TokenStream {
             quote! {#ident}
         }
     }
-}
-
-pub fn add_trait_bounds(mut generics: Generics, bounds: &[TokenStream]) -> Generics {
-    for param in &mut generics.params {
-        if let GenericParam::Type(ref mut type_param) = *param {
-            for bound in bounds {
-                type_param.bounds.push(parse_quote! { #bound })
-            }
-        }
-    }
-    generics
 }
 
 pub fn get_lifetimes(generics: &Generics) -> Vec<LifetimeDef> {
