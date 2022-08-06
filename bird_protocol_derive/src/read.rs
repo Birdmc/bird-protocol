@@ -1,11 +1,13 @@
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::{quote, ToTokens};
 use syn::{Data, DeriveInput, Field, Fields, Path};
-use crate::util::{DATA_ATTRIBUTES, DataAttributes, FieldAttributes, FieldVisitor, get_attributes, get_bird_protocol_crate, get_lifetimes, VariantAttributes, VariantVisitor, visit_derive_input, visit_fields};
+use syn::spanned::Spanned;
+use crate::util::{add_trait_lifetime, DATA_ATTRIBUTES, DataAttributes, FieldAttributes, FieldVisitor, get_attributes, get_bird_protocol_crate, get_lifetimes, VariantAttributes, VariantVisitor, visit_derive_input, visit_fields};
 
 pub struct ReadableVariantVisitor {
+    pub data_attributes: DataAttributes,
     pub lifetime: TokenStream,
-    pub variant_creators: Vec<TokenStream>,
+    pub variant_creators: Vec<(Option<TokenStream>, TokenStream)>,
 }
 
 pub struct ReadableFieldVisitor {
@@ -17,9 +19,9 @@ pub struct ReadableFieldVisitor {
 }
 
 impl VariantVisitor for ReadableVariantVisitor {
-    fn visit(&mut self, ident: Path, fields: &Fields, _: VariantAttributes) -> syn::Result<()> {
+    fn visit(&mut self, ident: Path, fields: &Fields, value: Option<TokenStream>, _: VariantAttributes) -> syn::Result<()> {
         match fields {
-            Fields::Unit => self.variant_creators.push(quote! { #ident }),
+            Fields::Unit => self.variant_creators.push((value, quote! { #ident })),
             _ => {
                 let named = match fields {
                     Fields::Named(_) => true,
@@ -34,10 +36,15 @@ impl VariantVisitor for ReadableVariantVisitor {
                     true => quote! { { #( #values, )* } },
                     false => quote! { ( #( #values, )* ) },
                 };
-                self.variant_creators.push(quote! {
-                    #( #reads; )*
-                    #ident #values
-                })
+                self.variant_creators.push(
+                    (
+                        value,
+                        quote! {
+                            #( #reads; )*
+                            #ident #values
+                        }
+                    )
+                )
             }
         }
         Ok(())
@@ -70,7 +77,8 @@ impl FieldVisitor for ReadableFieldVisitor {
         let value_ident = Ident::new(
             format!("__{}", ident.to_string()).as_str(), ident.span(),
         );
-        let value_read = read_statement(field, &attributes, &self.lifetime)?;
+        let Field { ty, .. } = field;
+        let value_read = read_statement(&quote! {#ty}, &attributes.variant, &self.lifetime)?;
         let read = quote! { let #value_ident = #value_read };
         match attributes.order {
             Some(index) => self.ordered_reads.push((index, read)),
@@ -84,10 +92,9 @@ impl FieldVisitor for ReadableFieldVisitor {
     }
 }
 
-pub fn read_statement(field: &Field, attributes: &FieldAttributes, lifetime: &TokenStream) -> syn::Result<TokenStream> {
-    let Field { ty, .. } = field;
+pub fn read_statement(ty: &TokenStream, variant: &Option<TokenStream>, lifetime: &TokenStream) -> syn::Result<TokenStream> {
     let protocol_crate = get_bird_protocol_crate();
-    Ok(match attributes.variant {
+    Ok(match variant {
         Some(ref variant) => quote! {
             < #variant as #protocol_crate ::packet::PacketVariantReadable< #lifetime , #ty >>
             ::read_variant(read)?
@@ -99,44 +106,101 @@ pub fn read_statement(field: &Field, attributes: &FieldAttributes, lifetime: &To
 }
 
 pub fn read_impl(args: &DeriveInput) -> syn::Result<TokenStream> {
-    match args.data {
-        Data::Struct(_) => {
-            let data_attributes: DataAttributes =
-                get_attributes(DATA_ATTRIBUTES, &args.attrs)?.try_into()?;
-            let lifetime = match data_attributes.lead_lifetime {
-                Some(lifetime) => lifetime,
-                None => {
-                    let lifetimes = get_lifetimes(&args.generics);
-                    match lifetimes.len() {
-                        0 => quote! {'_},
-                        1 => lifetimes.get(0).unwrap().to_token_stream(),
-                        _ => return Err(syn::Error::new(
-                            Span::call_site(), "attribute data with lifetime to set lead lifetime"
-                        ))
-                    }
+    let data_attributes: DataAttributes =
+        get_attributes(DATA_ATTRIBUTES, &args.attrs)?.try_into()?;
+    let (add_lifetime, lifetime) = match data_attributes.lead_lifetime {
+        Some(ref lifetime) => (false, lifetime.clone()),
+        None => {
+            let lifetimes = get_lifetimes(&args.generics);
+            match lifetimes.len() {
+                0 => {
+                    (true, quote! {'a})
                 }
-            };
-            let mut variant_visitor = ReadableVariantVisitor {
-                lifetime: lifetime.clone(),
-                variant_creators: vec![]
-            };
-            visit_derive_input(args, &mut variant_visitor)?;
-            let DeriveInput { ident, generics, .. } = args;
-            let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
-            let variants = variant_visitor.variant_creators;
-            let protocol_crate = get_bird_protocol_crate();
-            Ok(quote! {
-                impl #impl_generics #protocol_crate ::packet::PacketReadable< #lifetime > for #ident #ty_generics #where_clause {
-                    fn read<R>(read: &mut R) -> Result<Self, #protocol_crate ::packet::PacketReadableError>
-                        where R: #protocol_crate ::packet::PacketRead< #lifetime > {
-                        std::result::Result::Ok({ #(#variants)* })
-                    }
-                }
-            })
+                1 => (false, lifetimes.get(0).unwrap().to_token_stream()),
+                _ => return Err(syn::Error::new(
+                    Span::call_site(), "attribute data with lifetime to set lead lifetime",
+                ))
+            }
         }
-        Data::Enum(_) =>
-            Err(syn::Error::new(Span::call_site(), "enum type is not supported, yet")),
-        Data::Union(_) =>
-            Err(syn::Error::new(Span::call_site(), "union type is not supported"))
+    };
+    if let Data::Union(_) = args.data {
+        return Err(syn::Error::new(Span::call_site(), "union type is not supported"));
     }
+    let mut variant_visitor = ReadableVariantVisitor {
+        data_attributes,
+        lifetime: lifetime.clone(),
+        variant_creators: vec![],
+    };
+    visit_derive_input(args, &mut variant_visitor)?;
+    let protocol_crate = get_bird_protocol_crate();
+    let body: TokenStream = match args.data {
+        Data::Struct(_) => {
+            let (_, variants) = variant_visitor.variant_creators.get(0).unwrap();
+            quote! {std::result::Result::Ok({ #variants })}
+        }
+        Data::Enum(_) => {
+            if variant_visitor.data_attributes.enum_type.is_none() && variant_visitor.data_attributes.enum_variant.is_none() {
+                return Err(syn::Error::new(
+                    Span::call_site(),
+                    "You should provide enum type and variant to use PacketReadable macro",
+                ));
+            }
+            let (ty, variant) = match variant_visitor.data_attributes.enum_type {
+                Some(ref enum_type) => (enum_type, &variant_visitor.data_attributes.enum_variant),
+                None => (variant_visitor.data_attributes.enum_variant.as_ref().unwrap(), &None)
+            };
+            let value_read_ts = read_statement(
+                ty,
+                variant,
+                &lifetime,
+            )?;
+            let mut values = quote! {};
+            let mut counter = 0usize;
+            let mut result = quote! {};
+            for (value, variant) in variant_visitor.variant_creators {
+                let value = value.unwrap(); // it is enum
+                let value_ident = Ident::new(format!("__{}", counter).as_str(), value.span());
+                counter += 1;
+                values = quote! {
+                    #values
+                    const #value_ident: #ty = #value as #ty;
+                };
+                result = quote! {
+                    #result
+                    #value_ident => {
+                        #variant
+                    },
+                }
+            }
+            quote! {
+                let __value = #value_read_ts;
+                #values
+                std::result::Result::Ok(match __value {
+                    #result
+                    _ => return std::result::Result::Err(
+                        #protocol_crate ::packet::PacketReadableError::Any(anyhow::Error::msg("Bad value for enum"))
+                    )
+                })
+            }
+        }
+        _ => unreachable!()
+    };
+    let DeriveInput { ident, generics, .. } = args;
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+    let mut cloned_generics = generics.clone();
+    let impl_generics = match add_lifetime {
+        true => {
+            add_trait_lifetime(&mut cloned_generics, quote! {'a});
+            cloned_generics.split_for_impl().0
+        }
+        false => impl_generics,
+    };
+    Ok(quote! {
+        impl #impl_generics #protocol_crate ::packet::PacketReadable< #lifetime > for #ident #ty_generics #where_clause {
+            fn read<R>(read: &mut R) -> Result<Self, #protocol_crate ::packet::PacketReadableError>
+            where R: #protocol_crate ::packet::PacketRead< #lifetime > {
+                #body
+            }
+        }
+    })
 }

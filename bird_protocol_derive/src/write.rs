@@ -1,10 +1,11 @@
 use proc_macro2::{Ident, TokenStream};
-use quote::quote;
+use quote::{quote, ToTokens};
 use syn::{DeriveInput, Field, Fields, Path};
-use crate::util::{FieldAttributes, FieldVisitor, get_bird_protocol_crate, VariantAttributes, VariantVisitor, visit_derive_input, visit_fields};
+use crate::util::{DATA_ATTRIBUTES, DataAttributes, FieldAttributes, FieldVisitor, get_attributes, get_bird_protocol_crate, VariantAttributes, VariantVisitor, visit_derive_input, visit_fields};
 
 pub struct WritableVariantVisitor {
     variants: TokenStream,
+    data_attributes: DataAttributes,
 }
 
 pub struct WritableFieldVisitor {
@@ -14,9 +15,10 @@ pub struct WritableFieldVisitor {
 }
 
 impl WritableVariantVisitor {
-    pub fn new() -> Self {
+    pub fn new(data_attributes: DataAttributes) -> Self {
         Self {
-            variants: quote! {}
+            data_attributes,
+            variants: quote! {},
         }
     }
 
@@ -30,7 +32,8 @@ impl WritableVariantVisitor {
 }
 
 impl VariantVisitor for WritableVariantVisitor {
-    fn visit(&mut self, ident: Path, data_fields: &Fields, _attributes: VariantAttributes) -> syn::Result<()> {
+    fn visit(&mut self, ident: Path, data_fields: &Fields,
+             value: Option<TokenStream>, _attributes: VariantAttributes) -> syn::Result<()> {
         let Self { variants, .. } = self;
         let mut field_visitor = WritableFieldVisitor::new();
         visit_fields(data_fields, &mut field_visitor)?;
@@ -40,9 +43,45 @@ impl VariantVisitor for WritableVariantVisitor {
             Fields::Named(_) => quote! {{#fields}},
             Fields::Unnamed(_) => quote! {(#fields)},
         };
+
+        let variant = &self.data_attributes.enum_variant;
+        let ty = &self.data_attributes.enum_type;
+
+        let end_writes;
+        match value {
+            Some(value) => {
+                if variant.is_none() && ty.is_none() {
+                    end_writes = quote! { #(#writes)* };
+                } else if variant.is_some() && ty.is_some() {
+                    let ty = ty.as_ref().unwrap();
+                    let write_ts = write_ts(
+                        variant,
+                        ty,
+                        &quote! { &((#value) as #ty) },
+                    );
+                    end_writes = quote! {
+                        #write_ts
+                        #( #writes )*
+                    }
+                } else {
+                    let end_variant = variant.as_ref().or(ty.as_ref()).unwrap().clone();
+                    let write_ts = write_ts(
+                        &None,
+                        &end_variant,
+                        &quote! { &((#value) as #end_variant) },
+                    );
+                    end_writes = quote! {
+                        #write_ts
+                        #( #writes )*
+                    }
+                }
+            }
+            None => end_writes = quote! { #( #writes )* },
+        }
+
         *variants = quote! {
             #variants
-            #ident #fields => { #(#writes)* },
+            #ident #fields => { #end_writes },
         };
         Ok(())
     }
@@ -78,16 +117,12 @@ impl FieldVisitor for WritableFieldVisitor {
             #fields
             ref #ident,
         };
-        let protocol_crate = get_bird_protocol_crate();
         let Field { ty, .. } = field;
-        let write_ts = match attributes.variant {
-            Some(variant) => quote! {
-                < #variant as #protocol_crate ::packet::PacketVariantWritable< #ty >>::write_variant( #ident , write)?;
-            },
-            None => quote! {
-                < #ty as #protocol_crate ::packet::PacketWritable>::write( #ident , write)?;
-            }
-        };
+        let write_ts = write_ts(
+            &attributes.variant,
+            &quote! { #ty },
+            &ident.to_token_stream(),
+        );
         match attributes.order {
             Some(order) => ordered_writes.push((order, write_ts)),
             None => raw_writes.push(write_ts),
@@ -96,9 +131,24 @@ impl FieldVisitor for WritableFieldVisitor {
     }
 }
 
-pub fn write_impl(args: &DeriveInput) -> syn::Result<TokenStream> {
+fn write_ts(variant: &Option<TokenStream>, ty: &TokenStream, value: &TokenStream) -> TokenStream {
     let protocol_crate = get_bird_protocol_crate();
-    let mut visitor = WritableVariantVisitor::new();
+    match variant {
+        Some(ref variant) => quote! {
+            < #variant as #protocol_crate ::packet::PacketVariantWritable< #ty >>
+            ::write_variant( #value , write)?;
+        },
+        None => quote! {
+            < #ty as #protocol_crate ::packet::PacketWritable>::write( #value , write)?;
+        }
+    }
+}
+
+pub fn write_impl(args: &DeriveInput) -> syn::Result<TokenStream> {
+    let data_attributes =
+        get_attributes(DATA_ATTRIBUTES, &args.attrs)?.try_into()?;
+    let protocol_crate = get_bird_protocol_crate();
+    let mut visitor = WritableVariantVisitor::new(data_attributes);
     visit_derive_input(args, &mut visitor)?;
     let DeriveInput { ident, generics, .. } = args;
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();

@@ -2,14 +2,14 @@ use std::collections::HashMap;
 use proc_macro2::{Ident, Span, TokenStream};
 use proc_macro_crate::{crate_name, FoundCrate};
 use quote::{quote, ToTokens};
-use syn::{Attribute, Data, DataEnum, DataStruct, DeriveInput, Expr, Field, Fields, GenericParam, Generics, LifetimeDef, Lit, Path, PathArguments, PathSegment};
+use syn::{Attribute, Data, DataEnum, DataStruct, DeriveInput, Expr, Field, Fields, GenericParam, Generics, LifetimeDef, Lit, parse_quote, Path, PathArguments, PathSegment};
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 use syn::token::Colon2;
 
 pub const FIELD_ATTRIBUTES: &[&str] = &["variant", "var", "order"];
-pub const DATA_ATTRIBUTES: &[&str] = &["lifetime"];
-pub const VARIANT_ATTRIBUTES: &[&str] = &[];
+pub const DATA_ATTRIBUTES: &[&str] = &["lifetime", "enum_type", "enum_variant"];
+pub const VARIANT_ATTRIBUTES: &[&str] = &["value"];
 
 #[derive(Debug, Clone)]
 pub struct FieldAttributes {
@@ -19,6 +19,8 @@ pub struct FieldAttributes {
 
 #[derive(Debug, Clone)]
 pub struct DataAttributes {
+    pub enum_type: Option<TokenStream>,
+    pub enum_variant: Option<TokenStream>,
     pub lead_lifetime: Option<TokenStream>,
 }
 
@@ -32,7 +34,7 @@ pub trait FieldVisitor {
 }
 
 pub trait VariantVisitor {
-    fn visit(&mut self, ident: Path, fields: &Fields, attributes: VariantAttributes) -> syn::Result<()>;
+    fn visit(&mut self, ident: Path, fields: &Fields, value: Option<TokenStream>, attributes: VariantAttributes) -> syn::Result<()>;
 }
 
 pub fn visit_fields(fields: &Fields, visitor: &mut impl FieldVisitor) -> syn::Result<()> {
@@ -76,11 +78,26 @@ pub fn visit_derive_input(derive_input: &DeriveInput, visitor: &mut impl Variant
 
 pub fn visit_enum(
     enum_ident: &Ident,
-    attributes: &Vec<Attribute>,
+    _attributes: &Vec<Attribute>,
     data_enum: &DataEnum,
     visitor: &mut impl VariantVisitor,
 ) -> syn::Result<()> {
+    let mut start = quote! { 0 };
+    let mut counter = -1isize;
     for variant in &data_enum.variants {
+        let variant_attributes: VariantAttributes =
+            get_attributes(VARIANT_ATTRIBUTES, &variant.attrs)?.try_into()?;
+        match variant_attributes.value.as_ref().or(
+            variant.discriminant.as_ref().map(|(_, expr)| expr.to_token_stream()).as_ref()
+        ) {
+            Some(value) => {
+                start = value.clone();
+                counter = 0;
+            }
+            None => {
+                counter += 1;
+            }
+        }
         visitor.visit(
             Path {
                 leading_colon: None,
@@ -99,7 +116,8 @@ pub fn visit_enum(
                 },
             },
             &variant.fields,
-            get_attributes(VARIANT_ATTRIBUTES, attributes)?.try_into()?,
+            Some(quote! { #start + #counter }),
+            variant_attributes,
         )?
     }
     Ok(())
@@ -124,6 +142,7 @@ pub fn visit_struct(
             },
         },
         &data_struct.fields,
+        None,
         get_attributes(DATA_ATTRIBUTES, attributes)?.try_into()?,
     )
 }
@@ -171,8 +190,12 @@ impl TryFrom<HashMap<&str, Expr>> for DataAttributes {
 
     fn try_from(value: HashMap<&str, Expr>) -> Result<Self, Self::Error> {
         Ok(DataAttributes {
+            enum_type: value.get("enum_type")
+                .map(|expr| expr.to_token_stream()),
+            enum_variant: value.get("enum_variant")
+                .map(|expr| expr.to_token_stream()),
             lead_lifetime: value.get("lifetime")
-                .map(|expr| expr.to_token_stream())
+                .map(|expr| expr.to_token_stream()),
         })
     }
 }
@@ -197,6 +220,10 @@ pub fn get_bird_protocol_crate() -> TokenStream {
             quote! {#ident}
         }
     }
+}
+
+pub fn add_trait_lifetime(generics: &mut Generics, lifetime: TokenStream) {
+    generics.params.push(parse_quote! { #lifetime })
 }
 
 pub fn get_lifetimes(generics: &Generics) -> Vec<LifetimeDef> {
