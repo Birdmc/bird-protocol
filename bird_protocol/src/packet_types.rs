@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::marker::PhantomData;
 use anyhow::Error;
+use uuid::Uuid;
 use crate::packet::{PacketRead, PacketReadable, PacketReadableError, PacketWritable, PacketVariantReadable, PacketVariantWritable, PacketWrite};
 
 pub struct VarInt;
@@ -386,6 +387,19 @@ impl<'a> PacketReadable<'a> for bird_chat::identifier::Identifier<'a> {
 impl PacketWritable for bird_chat::identifier::Identifier<'_> {
     fn write<W>(&self, write: &mut W) -> Result<(), Error> where W: PacketWrite {
         self.get_fulled().write(write)
+    }
+}
+
+impl<'a> PacketReadable<'a> for Uuid {
+    fn read<R>(read: &mut R) -> Result<Self, PacketReadableError> where R: PacketRead<'a> {
+        Uuid::from_slice(read.take_slice(16)?)
+            .map_err(|err| PacketReadableError::Any(err.into()))
+    }
+}
+
+impl PacketWritable for Uuid {
+    fn write<W>(&self, write: &mut W) -> Result<(), Error> where W: PacketWrite {
+        write.write_bytes(self.as_bytes().as_slice())
     }
 }
 
