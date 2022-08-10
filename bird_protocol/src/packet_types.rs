@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::marker::PhantomData;
 use anyhow::Error;
 use uuid::Uuid;
+use crate::Packet;
 use crate::packet::{PacketRead, PacketReadable, PacketReadableError, PacketWritable, PacketVariantReadable, PacketVariantWritable, PacketWrite};
 
 pub struct VarInt;
@@ -48,6 +49,13 @@ pub struct BlockPosition {
 }
 
 pub struct Angle;
+
+/// Packet variant for PacketWritable and PacketReadable.
+///
+/// Writable: Write packet id as [VarInt] and then packet itself.
+///
+/// Readable: Just read packet.
+pub struct PacketVariant;
 
 impl ProtocolArray for RemainingBytesSlice {}
 
@@ -400,6 +408,19 @@ impl<'a> PacketReadable<'a> for Uuid {
 impl PacketWritable for Uuid {
     fn write<W>(&self, write: &mut W) -> Result<(), Error> where W: PacketWrite {
         write.write_bytes(self.as_bytes().as_slice())
+    }
+}
+
+impl<'a, T: PacketReadable<'a> + Packet> PacketVariantReadable<'a, T> for PacketVariant {
+    fn read_variant<R>(read: &mut R) -> Result<T, PacketReadableError> where R: PacketRead<'a> {
+        T::read(read)
+    }
+}
+
+impl<T: PacketWritable + Packet> PacketVariantWritable<T> for PacketVariant {
+    fn write_variant<W>(object: &T, write: &mut W) -> Result<(), Error> where W: PacketWrite {
+        VarInt::write_variant(&T::id(), write)?;
+        T::write(object, write)
     }
 }
 

@@ -12,7 +12,8 @@ pub enum HandshakeNextState {
     Login,
 }
 
-#[derive(PacketWritable, PacketReadable, Debug, Clone, PartialEq)]
+#[derive(Packet, PacketWritable, PacketReadable, Debug, Clone, PartialEq)]
+#[packet(bound = Server, state = Handshake, id = 0x00)]
 pub struct HandshakePacket<'a> {
     #[variant(VarInt)]
     pub protocol_version: i32,
@@ -53,11 +54,46 @@ pub struct StatusResponseObject<'a> {
     pub previews_chat: bool,
 }
 
-#[derive(PacketWritable, PacketReadable, Debug, Clone, PartialEq)]
+#[derive(Packet, PacketWritable, PacketReadable, Debug, Clone, PartialEq)]
+#[packet(bound = Client, state = Status, id = 0x00)]
 pub struct StatusResponse<'a>(
     #[variant(ProtocolJson)]
     pub StatusResponseObject<'a>,
 );
+
+#[derive(Packet, PacketWritable, PacketReadable, Debug, Clone, PartialEq)]
+#[packet(bound = Client, state = Status, id = 0x01)]
+pub struct StatusPingResponse {
+    pub payload: i64,
+}
+
+#[derive(Packet, PacketWritable, PacketReadable, Debug, Clone, PartialEq)]
+#[packet(bound = Server, state = Status, id = 0x00)]
+pub struct StatusRequest;
+
+#[derive(Packet, PacketWritable, PacketReadable, Debug, Clone, PartialEq)]
+#[packet(bound = Server, state = Status, id = 0x01)]
+pub struct StatusPingRequest {
+    pub payload: i64,
+}
+
+#[derive(Packet, PacketWritable, PacketReadable, Debug, Clone, PartialEq)]
+#[packet(bound = Client, state = Login, id = 0x00)]
+pub struct LoginDisconnect<'a> {
+    pub reason: Component<'a>
+}
+
+type LengthProvidedBytesSliceVI = LengthProvidedBytesSlice<VarInt, i32>;
+
+#[derive(Packet, PacketWritable, PacketReadable, Debug, Clone, PartialEq)]
+#[packet(bound = Client, state = Login, id = 0x00)]
+pub struct LoginEncryptionRequest<'a> {
+    pub server_id: &'a str,
+    #[variant(LengthProvidedBytesSliceVI)]
+    pub public_key: &'a [u8],
+    #[variant(LengthProvidedBytesSliceVI)]
+    pub verify_token: &'a [u8],
+}
 
 fn is_cow_empty<T: Clone>(cow: &Cow<[T]>) -> bool {
     cow.is_empty()

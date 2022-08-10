@@ -5,7 +5,29 @@ pub enum PacketReadableError {
     #[error("Bytes exceeded")]
     BytesExceeded,
     #[error("{0}")]
-    Any(#[from] anyhow::Error),
+    Any(#[from] Error),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum PacketBound {
+    Client,
+    Server,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum PacketState {
+    Handshake,
+    Status,
+    Login,
+    Play,
+}
+
+pub trait Packet {
+    fn bound() -> PacketBound;
+
+    fn state() -> PacketState;
+
+    fn id() -> i32;
 }
 
 pub trait PacketReadable<'a>: Sized {
@@ -17,11 +39,11 @@ pub trait PacketVariantReadable<'a, T: Sized> {
 }
 
 pub trait PacketWritable {
-    fn write<W>(&self, write: &mut W) -> Result<(), anyhow::Error> where W: PacketWrite;
+    fn write<W>(&self, write: &mut W) -> Result<(), Error> where W: PacketWrite;
 }
 
 pub trait PacketVariantWritable<T: ?Sized> {
-    fn write_variant<W>(object: &T, write: &mut W) -> Result<(), anyhow::Error> where W: PacketWrite;
+    fn write_variant<W>(object: &T, write: &mut W) -> Result<(), Error> where W: PacketWrite;
 }
 
 impl<'a, T: PacketReadable<'a>> PacketVariantReadable<'a, T> for T {
@@ -36,14 +58,20 @@ impl<T: PacketWritable> PacketVariantWritable<T> for T {
     }
 }
 
+impl<'a, V, T: PacketVariantWritable<[V]>> PacketVariantWritable<&'a [V]> for T {
+    fn write_variant<W>(object: &&'a [V], write: &mut W) -> Result<(), Error> where W: PacketWrite {
+        T::write_variant(*object, write)
+    }
+}
+
 pub trait PacketWrite {
-    fn write_byte(&mut self, byte: u8) -> Result<(), anyhow::Error>;
+    fn write_byte(&mut self, byte: u8) -> Result<(), Error>;
 
-    fn write_bytes(&mut self, bytes: &[u8]) -> Result<(), anyhow::Error>;
+    fn write_bytes(&mut self, bytes: &[u8]) -> Result<(), Error>;
 
-    fn write_bytes_owned(&mut self, bytes: Vec<u8>) -> Result<(), anyhow::Error>;
+    fn write_bytes_owned(&mut self, bytes: Vec<u8>) -> Result<(), Error>;
 
-    fn write_bytes_fixed<const SIZE: usize>(&mut self, bytes: [u8; SIZE]) -> Result<(), anyhow::Error>;
+    fn write_bytes_fixed<const SIZE: usize>(&mut self, bytes: [u8; SIZE]) -> Result<(), Error>;
 }
 
 pub trait PacketRead<'a> {
@@ -51,7 +79,7 @@ pub trait PacketRead<'a> {
 
     fn take_slice(&mut self, length: usize) -> Result<&'a [u8], PacketReadableError>;
 
-    fn rollback(&mut self, length: usize) -> Result<(), anyhow::Error>;
+    fn rollback(&mut self, length: usize) -> Result<(), Error>;
 
     fn available(&self) -> usize;
 

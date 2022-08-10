@@ -2,7 +2,9 @@ use std::collections::HashMap;
 use proc_macro2::{Ident, Span, TokenStream};
 use proc_macro_crate::{crate_name, FoundCrate};
 use quote::{quote, ToTokens};
-use syn::{Attribute, Data, DataEnum, DataStruct, DeriveInput, Expr, Field, Fields, GenericParam, Generics, LifetimeDef, Lit, parse_quote, Path, PathArguments, PathSegment};
+use syn::{Attribute, Data, DataEnum, DataStruct, DeriveInput, Expr, ExprAssign, Field, Fields, GenericParam, Generics, LifetimeDef, Lit, parse_quote, Path, PathArguments, PathSegment, Token};
+use syn::parse::{Parse, ParseStream};
+use syn::parse_quote::ParseQuote;
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 use syn::token::Colon2;
@@ -27,6 +29,13 @@ pub struct DataAttributes {
 #[derive(Debug, Clone)]
 pub struct VariantAttributes {
     pub value: Option<TokenStream>,
+}
+
+#[derive(Debug, Clone)]
+pub struct PacketAttributes {
+    pub bound: TokenStream,
+    pub state: TokenStream,
+    pub id: TokenStream,
 }
 
 pub trait FieldVisitor {
@@ -234,4 +243,42 @@ pub fn get_lifetimes(generics: &Generics) -> Vec<LifetimeDef> {
         }
     }
     result
+}
+
+fn collect_map_attribute(input: ParseStream) -> syn::Result<HashMap<String, Expr>> {
+    let punctuated: Punctuated<ExprAssign, Token![,]> = Punctuated::parse(input)?;
+    let mut result = HashMap::new();
+    for value in punctuated {
+        let name = match value.left.as_ref() {
+            Expr::Path(ref expr_path) => expr_path.path
+                .segments
+                .iter()
+                .map(|segment| segment.ident.to_string())
+                .collect::<Vec<String>>()
+                .join("::"),
+            Expr::Lit(ref lit) => match lit.lit {
+                Lit::Str(ref lit) => lit.value(),
+                _ => return Err(syn::Error::new(
+                    value.left.span(), "Only string lit supported or path")
+                )
+            },
+            _ => return Err(syn::Error::new(
+                value.left.span(), "Only string lit supported or path")
+            )
+        };
+        result.insert(name, value.right.as_ref().clone());
+    }
+    Ok(result)
+}
+
+impl Parse for PacketAttributes {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let attrs = collect_map_attribute(input)?;
+        Ok(Self {
+            // TODO handling
+            id: attrs.get("id").unwrap().to_token_stream(),
+            bound: attrs.get("bound").unwrap().to_token_stream(),
+            state: attrs.get("state").unwrap().to_token_stream()
+        })
+    }
 }
