@@ -80,19 +80,26 @@ pub struct StatusPingRequest {
 #[derive(Packet, PacketWritable, PacketReadable, Debug, Clone, PartialEq)]
 #[packet(bound = Client, state = Login, id = 0x00)]
 pub struct LoginDisconnect<'a> {
-    pub reason: Component<'a>
+    pub reason: Component<'a>,
 }
 
 type LengthProvidedBytesSliceVI = LengthProvidedBytesSlice<VarInt, i32>;
 
 #[derive(Packet, PacketWritable, PacketReadable, Debug, Clone, PartialEq)]
-#[packet(bound = Client, state = Login, id = 0x00)]
+#[packet(bound = Client, state = Login, id = 0x01)]
 pub struct LoginEncryptionRequest<'a> {
     pub server_id: &'a str,
     #[variant(LengthProvidedBytesSliceVI)]
     pub public_key: &'a [u8],
     #[variant(LengthProvidedBytesSliceVI)]
     pub verify_token: &'a [u8],
+}
+
+#[derive(PacketWritable, PacketReadable, Debug, Clone, PartialEq)]
+pub struct LoginSuccessProperty<'a> {
+    pub name: &'a str,
+    pub value: &'a str,
+    pub signature: Option<&'a str>,
 }
 
 fn is_cow_empty<T: Clone>(cow: &Cow<[T]>) -> bool {

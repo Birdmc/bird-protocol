@@ -9,8 +9,6 @@ pub struct VarInt;
 
 pub struct VarLong;
 
-pub trait ProtocolArray {}
-
 pub struct RemainingSlice<
     Value,
     ValueInner = Value,
@@ -56,25 +54,6 @@ pub struct Angle;
 ///
 /// Readable: Just read packet.
 pub struct PacketVariant;
-
-impl ProtocolArray for RemainingBytesSlice {}
-
-impl<
-    Value,
-    ValueInner
-> ProtocolArray for RemainingSlice<Value, ValueInner> {}
-
-impl<
-    Length,
-    Value,
-    LengthInner: PacketLength,
-    ValueInner
-> ProtocolArray for LengthProvidedSlice<Length, Value, LengthInner, ValueInner> {}
-
-impl<
-    Length,
-    LengthInner: PacketLength
-> ProtocolArray for LengthProvidedBytesSlice<Length, LengthInner> {}
 
 impl<'a> PacketReadable<'a> for u8 {
     fn read<R>(read: &mut R) -> Result<Self, PacketReadableError> where R: PacketRead<'a> {
@@ -177,41 +156,26 @@ impl PacketWritable for Cow<'_, str> {
     }
 }
 
-impl<'a, V: 'a + Clone, T: PacketVariantReadable<'a, &'a [V]> + ProtocolArray> PacketVariantReadable<'a, Vec<V>> for T {
-    fn read_variant<R>(read: &mut R) -> Result<Vec<V>, PacketReadableError> where R: PacketRead<'a> {
-        Ok(T::read_variant(read)?.to_vec())
-    }
-}
-
-impl<'a, V: 'a + Clone, T: PacketVariantReadable<'a, &'a [V]> + ProtocolArray> PacketVariantReadable<'a, Cow<'a, [V]>> for T {
-    fn read_variant<R>(read: &mut R) -> Result<Cow<'a, [V]>, PacketReadableError> where R: PacketRead<'a> {
-        Ok(Cow::Borrowed(T::read_variant(read)?))
-    }
-}
-
-impl<V, T: PacketVariantWritable<[V]> + ProtocolArray> PacketVariantWritable<Vec<V>> for T {
-    fn write_variant<W>(object: &Vec<V>, write: &mut W) -> Result<(), Error> where W: PacketWrite {
-        T::write_variant(object.as_slice(), write)
-    }
-}
-
-impl<V: Clone, T: PacketVariantWritable<[V]> + ProtocolArray> PacketVariantWritable<Cow<'_, [V]>> for T {
-    fn write_variant<W>(object: &Cow<'_, [V]>, write: &mut W) -> Result<(), Error> where W: PacketWrite {
-        match object {
-            Cow::Owned(ref owned) => T::write_variant(owned.as_slice(), write),
-            Cow::Borrowed(ref borrowed) => T::write_variant(borrowed, write),
-        }
-    }
-}
-
 impl<'a> PacketVariantReadable<'a, &'a [u8]> for RemainingBytesSlice {
     fn read_variant<R>(read: &mut R) -> Result<&'a [u8], PacketReadableError> where R: PacketRead<'a> {
         read.take_slice(read.available())
     }
 }
 
-impl PacketVariantWritable<&[u8]> for RemainingBytesSlice {
-    fn write_variant<W>(object: &&[u8], write: &mut W) -> Result<(), Error> where W: PacketWrite {
+impl<'a> PacketVariantReadable<'a, Vec<u8>> for RemainingBytesSlice {
+    fn read_variant<R>(read: &mut R) -> Result<Vec<u8>, PacketReadableError> where R: PacketRead<'a> {
+        Self::read_variant(read).map(|val: &'a [u8]| val.to_owned())
+    }
+}
+
+impl<'a> PacketVariantReadable<'a, Cow<'a, [u8]>> for RemainingBytesSlice {
+    fn read_variant<R>(read: &mut R) -> Result<Cow<'a, [u8]>, PacketReadableError> where R: PacketRead<'a> {
+        Self::read_variant(read).map(|val| Cow::Borrowed(val))
+    }
+}
+
+impl PacketVariantWritable<[u8]> for RemainingBytesSlice {
+    fn write_variant<W>(object: &[u8], write: &mut W) -> Result<(), Error> where W: PacketWrite {
         write.write_bytes(object)
     }
 }
@@ -219,6 +183,15 @@ impl PacketVariantWritable<&[u8]> for RemainingBytesSlice {
 impl PacketVariantWritable<Vec<u8>> for RemainingBytesSlice {
     fn write_variant<W>(object: &Vec<u8>, write: &mut W) -> Result<(), Error> where W: PacketWrite {
         write.write_bytes(object.as_slice())
+    }
+}
+
+impl PacketVariantWritable<Cow<'_, [u8]>> for RemainingBytesSlice {
+    fn write_variant<W>(object: &Cow<'_, [u8]>, write: &mut W) -> Result<(), Error> where W: PacketWrite {
+        Self::write_variant(match object {
+            Cow::Owned(ref owned) => owned.as_slice(),
+            Cow::Borrowed(borrowed) => borrowed,
+        }, write)
     }
 }
 
@@ -237,6 +210,16 @@ impl<
 }
 
 impl<
+    'a,
+    Value: PacketVariantReadable<'a, ValueInner>,
+    ValueInner: 'a + Clone
+> PacketVariantReadable<'a, Cow<'a, [ValueInner]>> for RemainingSlice<Value, ValueInner> {
+    fn read_variant<R>(read: &mut R) -> Result<Cow<'a, [ValueInner]>, PacketReadableError> where R: PacketRead<'a> {
+        Self::read_variant(read).map(|val| Cow::Owned(val))
+    }
+}
+
+impl<
     Value: PacketVariantWritable<ValueInner>,
     ValueInner
 > PacketVariantWritable<[ValueInner]> for RemainingSlice<Value, ValueInner> {
@@ -245,6 +228,28 @@ impl<
             Value::write_variant(element, write)?
         }
         Ok(())
+    }
+}
+
+impl<
+    Value: PacketVariantWritable<ValueInner>,
+    ValueInner
+> PacketVariantWritable<Vec<ValueInner>> for RemainingSlice<Value, ValueInner> {
+    fn write_variant<W>(object: &Vec<ValueInner>, write: &mut W) -> Result<(), Error> where W: PacketWrite {
+        Self::write_variant(object.as_slice(), write)
+    }
+}
+
+
+impl<
+    Value: PacketVariantWritable<ValueInner>,
+    ValueInner: Clone
+> PacketVariantWritable<Cow<'_, [ValueInner]>> for RemainingSlice<Value, ValueInner> {
+    fn write_variant<W>(object: &Cow<[ValueInner]>, write: &mut W) -> Result<(), Error> where W: PacketWrite {
+        Self::write_variant(match object {
+            Cow::Owned(ref owned) => owned.as_slice(),
+            Cow::Borrowed(borrowed) => borrowed,
+        }, write)
     }
 }
 
@@ -265,6 +270,24 @@ impl<
     }
 }
 
+impl<'a,
+    Length: PacketVariantReadable<'a, LengthInner>,
+    LengthInner: PacketLength
+> PacketVariantReadable<'a, Vec<u8>> for LengthProvidedBytesSlice<Length, LengthInner> {
+    fn read_variant<R>(read: &mut R) -> Result<Vec<u8>, PacketReadableError> where R: PacketRead<'a> {
+        Self::read_variant(read).map(|val: &'a [u8]| val.to_owned())
+    }
+}
+
+impl<'a,
+    Length: PacketVariantReadable<'a, LengthInner>,
+    LengthInner: PacketLength
+> PacketVariantReadable<'a, Cow<'a, [u8]>> for LengthProvidedBytesSlice<Length, LengthInner> {
+    fn read_variant<R>(read: &mut R) -> Result<Cow<'a, [u8]>, PacketReadableError> where R: PacketRead<'a> {
+        Self::read_variant(read).map(|val| Cow::Borrowed(val))
+    }
+}
+
 impl<
     Length: PacketVariantWritable<LengthInner>,
     LengthInner: PacketLength
@@ -272,6 +295,27 @@ impl<
     fn write_variant<W>(object: &[u8], write: &mut W) -> Result<(), Error> where W: PacketWrite {
         Length::write_variant(&LengthInner::from_length(object.len()), write)?;
         write.write_bytes(object)
+    }
+}
+
+impl<
+    Length: PacketVariantWritable<LengthInner>,
+    LengthInner: PacketLength
+> PacketVariantWritable<Vec<u8>> for LengthProvidedBytesSlice<Length, LengthInner> {
+    fn write_variant<W>(object: &Vec<u8>, write: &mut W) -> Result<(), Error> where W: PacketWrite {
+        Self::write_variant(object.as_slice(), write)
+    }
+}
+
+impl<
+    Length: PacketVariantWritable<LengthInner>,
+    LengthInner: PacketLength
+> PacketVariantWritable<Cow<'_, [u8]>> for LengthProvidedBytesSlice<Length, LengthInner> {
+    fn write_variant<W>(object: &Cow<[u8]>, write: &mut W) -> Result<(), Error> where W: PacketWrite {
+        Self::write_variant(match object {
+            Cow::Owned(ref owned) => owned.as_slice(),
+            Cow::Borrowed(borrowed) => borrowed,
+        }, write)
     }
 }
 
@@ -293,6 +337,18 @@ impl<
 }
 
 impl<
+    'a,
+    Length: PacketVariantReadable<'a, LengthInner>,
+    Value: PacketVariantReadable<'a, ValueInner>,
+    LengthInner: PacketLength,
+    ValueInner: 'a + Clone
+> PacketVariantReadable<'a, Cow<'a, [ValueInner]>> for LengthProvidedSlice<Length, Value, LengthInner, ValueInner> {
+    fn read_variant<R>(read: &mut R) -> Result<Cow<'a, [ValueInner]>, PacketReadableError> where R: PacketRead<'a> {
+        Self::read_variant(read).map(|val| Cow::Owned(val))
+    }
+}
+
+impl<
     Length: PacketVariantWritable<LengthInner>,
     Value: PacketVariantWritable<ValueInner>,
     LengthInner: PacketLength,
@@ -304,6 +360,31 @@ impl<
             Value::write_variant(element, write)?
         }
         Ok(())
+    }
+}
+
+impl<
+    Length: PacketVariantWritable<LengthInner>,
+    Value: PacketVariantWritable<ValueInner>,
+    LengthInner: PacketLength,
+    ValueInner
+> PacketVariantWritable<Vec<ValueInner>> for LengthProvidedSlice<Length, Value, LengthInner, ValueInner> {
+    fn write_variant<W>(object: &Vec<ValueInner>, write: &mut W) -> Result<(), Error> where W: PacketWrite {
+        Self::write_variant(object.as_slice(), write)
+    }
+}
+
+impl<
+    Length: PacketVariantWritable<LengthInner>,
+    Value: PacketVariantWritable<ValueInner>,
+    LengthInner: PacketLength,
+    ValueInner: Clone
+> PacketVariantWritable<Cow<'_, [ValueInner]>> for LengthProvidedSlice<Length, Value, LengthInner, ValueInner> {
+    fn write_variant<W>(object: &Cow<[ValueInner]>, write: &mut W) -> Result<(), Error> where W: PacketWrite {
+        Self::write_variant(match object {
+            Cow::Owned(ref owned) => owned.as_slice(),
+            Cow::Borrowed(borrowed) => borrowed,
+        }, write)
     }
 }
 
@@ -421,6 +502,27 @@ impl<T: PacketWritable + Packet> PacketVariantWritable<T> for PacketVariant {
     fn write_variant<W>(object: &T, write: &mut W) -> Result<(), Error> where W: PacketWrite {
         VarInt::write_variant(&T::id(), write)?;
         T::write(object, write)
+    }
+}
+
+impl<T: PacketWritable> PacketWritable for Option<T> {
+    fn write<W>(&self, write: &mut W) -> Result<(), Error> where W: PacketWrite {
+        match self {
+            Some(ref obj) => {
+                true.write(write)?;
+                obj.write(write)
+            }
+            None => false.write(write)
+        }
+    }
+}
+
+impl<'a, T: PacketReadable<'a>> PacketReadable<'a> for Option<T> {
+    fn read<R>(read: &mut R) -> Result<Self, PacketReadableError> where R: PacketRead<'a> {
+        Ok(match bool::read(read)? {
+            true => Some(T::read(read)?),
+            false => None
+        })
     }
 }
 
