@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+use anyhow::Error;
 use crate::packet::*;
 use crate::packet_types::*;
 
@@ -44,5 +46,27 @@ fn var_number_tests() {
         VarInt::write_variant(&255, &mut write).unwrap();
         VarInt::write_variant(&-1, &mut write).unwrap();
         assert_eq!(write, &[0x80, 0x01, 0xff, 0x01, 0xff, 0xff, 0xff, 0xff, 0x0f]);
+    }
+}
+
+#[test]
+fn slice_tests() {
+    {
+        let mut read = SlicePacketRead::new(&[0x80, 0x01, 0xff, 0x01, 0xff, 0xff, 0xff, 0xff, 0x0f]);
+        assert_eq!(
+            <RemainingSlice<VarInt, i32> as PacketVariantReadable<'_, Vec<i32>>>::read_variant(&mut read)
+                .unwrap(), &[128, 255, -1]
+        );
+    }
+    {
+        let mut write = Vec::new();
+        "hello".write(&mut write).unwrap();
+        "bye".write(&mut write).unwrap();
+        "yeah".write(&mut write).unwrap();
+        let mut read = SlicePacketRead::new(write.as_slice());
+        assert_eq!(
+            <RemainingSlice<&str> as PacketVariantReadable<'_, Vec<&str>>>::read_variant(&mut read).unwrap(),
+            &["hello", "bye", "yeah"]
+        );
     }
 }
