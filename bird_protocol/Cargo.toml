@@ -1,7 +1,9 @@
 [package]
 name = "bird-protocol"
-version = "0.1.0"
+version = "0.1.3"
 edition = "2021"
+license = "MIT"
+description = "Minecraft protocol on rust"
 
 [dependencies]
 thiserror = "1.0.31"
