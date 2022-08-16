@@ -2,7 +2,6 @@
 #![feature(associated_type_bounds)]
 
 extern crate anyhow;
-extern crate core;
 
 pub mod packet;
 pub mod packet_types;
