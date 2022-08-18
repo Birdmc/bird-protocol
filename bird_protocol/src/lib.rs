@@ -19,4 +19,6 @@ mod tests;
 pub use crate::packet::*;
 pub use crate::packet_types::*;
 #[cfg(feature = "derive")]
-use bird_protocol_derive::*;
+pub mod derive {
+    pub use bird_protocol_derive::*;
+}

@@ -3,6 +3,7 @@ use bird_chat::component::Component;
 use bird_chat::identifier::Identifier;
 use uuid::Uuid;
 use crate::*;
+use crate::derive::*;
 use serde::{Serialize, Deserialize};
 
 #[derive(PacketWritable, PacketReadable, Debug, Clone, Copy, PartialEq)]
